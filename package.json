@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test engine/tests/*.test.js"
+    "test": "node --test engine/tests/*.test.js engine/v1/tests/*.test.js"
   }
 }
