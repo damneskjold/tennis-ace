@@ -54,11 +54,23 @@ function shuffle(items, random) {
   return copy;
 }
 
-function selectFavorable(deltas, count, offset) {
+// Draw the buttons from a slightly wider shortlist than strictly needed, so
+// consecutive sets in the same match don't show an identical list. Only the
+// chosen category is barred from coming back, so without this the top options
+// simply sit there every set.
+const SHORTLIST_SLACK = 2;
+
+function selectFavorable(deltas, count, offset, random) {
   const sorted = deltas.slice().sort((a, b) => b.delta - a.delta);
+  // Widen only within genuinely favorable categories. Cross-era matchups can
+  // have as few as six categories in total, and letting the shortlist spill
+  // past zero there would quietly put a trap in the easy round.
+  const favorable = sorted.filter((entry) => entry.delta > 0);
+  const source = favorable.length >= count ? favorable : sorted;
   // Clamp the offset so a matchup with few categories still fills the buttons.
-  const start = Math.max(0, Math.min(offset, sorted.length - count));
-  return sorted.slice(start, start + count);
+  const start = Math.max(0, Math.min(offset, source.length - count));
+  const shortlist = source.slice(start, start + count + SHORTLIST_SLACK);
+  return shuffle(shortlist, random).slice(0, count);
 }
 
 /**
@@ -79,10 +91,11 @@ function ensureMixedSigns(chosen, pool, count) {
   return [...chosen.slice(0, count - 1), replacement];
 }
 
-function selectExtreme(deltas, count, band) {
+function selectExtreme(deltas, count, band, random) {
   const byMagnitude = deltas.slice().sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
   const pool = band === "max" ? byMagnitude : byMagnitude.slice(Math.floor(byMagnitude.length / 3));
-  const chosen = pool.slice(0, count);
+  const shortlist = pool.slice(0, count + SHORTLIST_SLACK);
+  const chosen = shuffle(shortlist, random).slice(0, count);
   return ensureMixedSigns(chosen, pool, count);
 }
 
@@ -112,8 +125,8 @@ export function selectCategoryOptions(deltas, round, _gapPercentiles, usedCatego
   const count = Math.min(optionCount, available.length);
   const chosen =
     strategy.mode === "favorable"
-      ? selectFavorable(available, count, strategy.offset)
-      : selectExtreme(available, count, strategy.band);
+      ? selectFavorable(available, count, strategy.offset, random)
+      : selectExtreme(available, count, strategy.band, random);
 
   return shuffle(chosen, random).map((entry) => entry.key);
 }

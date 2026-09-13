@@ -1,13 +1,16 @@
 import { createEngine } from "./engine/index.js";
+import { flagFor } from "./flags.js";
 
 const ROUNDS = ["ottavi", "quarti", "semifinale", "finale"];
 const ROUND_LABELS = {
-  ottavi: "Ottavi di finale",
-  quarti: "Quarti di finale",
+  ottavi: "Ottavi",
+  quarti: "Quarti",
   semifinale: "Semifinale",
   finale: "Finale",
 };
 const SETS_TO_WIN = { Bo3: 2, Bo5: 3 };
+const MAX_PICKER_RESULTS = 60;
+
 const STAT_LABELS = {
   ace_pct: "% ace",
   first_in_pct: "% prime in campo",
@@ -21,14 +24,27 @@ const STAT_LABELS = {
   return_games_won_pct: "% game in risposta vinti",
   tiebreaks_won_pct: "% tie-break vinti",
   deciding_set_won_pct: "% partite vinte al set decisivo",
+  games_won_pct: "% game vinti",
+  straight_sets_win_pct: "% vittorie senza perdere set",
+  comeback_win_pct: "% rimonte da sotto di un set",
+  first_set_win_pct: "% primi set vinti",
+  clay_win_pct: "% vittorie sulla terra",
+  hard_win_pct: "% vittorie sul cemento",
 };
 
 const root = document.getElementById("app");
 
-/** @type {any} */
 let state = null;
 let playersData = null;
 let engine = null;
+
+const cardName = (card) => `${flagFor(card.country)} ${card.name}`.trim();
+
+// Tennis scoreboards use surnames. Sackmann names are "First Last" or
+// "First Last Last", so dropping the first token is the right call more often
+// than taking only the final one ("Bautista Agut", not "Agut").
+const surname = (card) => card.name.split(" ").slice(1).join(" ") || card.name;
+const shortCardName = (card) => `${flagFor(card.country)} ${surname(card)}`.trim();
 
 function randomOpponent(excludeIds, excludePlayerIds) {
   const pool = playersData.players.filter((p) => !excludeIds.has(p.id) && !excludePlayerIds.has(p.player_id));
@@ -53,14 +69,12 @@ function newTournamentState(format, playerCard) {
     opponentSets: 0,
     currentOptions: [],
     lastReveal: null,
-    history: [], // { round, opponent, sets: [{score, comment, categoryKey, categoryLabel, won}], result }
-    matchSets: [], // sets played in the current match, same shape as above
+    history: [],
+    matchSets: [],
   };
 }
 
-function currentRound() {
-  return ROUNDS[state.roundIndex];
-}
+const currentRound = () => ROUNDS[state.roundIndex];
 
 function startSet() {
   state.currentOptions = engine.getCategoryOptions(
@@ -75,11 +89,20 @@ function startSet() {
 
 function chooseCategory(categoryKey) {
   const outcome = engine.resolveChoice(state.playerCard, state.opponent, categoryKey);
+  // Record what the alternatives would have been, for the end-of-tournament
+  // pagella only -- this is never surfaced before the choice is made.
+  const alternatives = state.currentOptions.map((opt) => ({
+    key: opt.key,
+    label: opt.label,
+    probability: engine.probabilityFor(state.playerCard, state.opponent, opt.key),
+    chosen: opt.key === categoryKey,
+  }));
+
   state.usedCategories.add(categoryKey);
   if (outcome.won) state.playerSets++;
   else state.opponentSets++;
 
-  const setRecord = { ...outcome };
+  const setRecord = { ...outcome, alternatives };
   state.matchSets.push(setRecord);
   state.lastReveal = setRecord;
   state.screen = "reveal";
@@ -102,19 +125,12 @@ function afterReveal() {
     result: wonMatch ? "vinto" : "perso",
   });
 
-  if (!wonMatch) {
+  if (!wonMatch || state.roundIndex === ROUNDS.length - 1) {
+    state.eliminated = !wonMatch;
     state.screen = "final";
-    state.eliminated = true;
     return;
   }
 
-  if (state.roundIndex === ROUNDS.length - 1) {
-    state.screen = "final";
-    state.eliminated = false;
-    return;
-  }
-
-  // Next round: draw a new opponent, reset per-match state.
   state.roundIndex++;
   state.playerSets = 0;
   state.opponentSets = 0;
@@ -127,169 +143,234 @@ function afterReveal() {
 }
 
 function renderSetup() {
-  const sorted = playersData.players
+  const query = (state.query || "").trim().toLowerCase();
+  const matches = playersData.players.filter(
+    (p) => !query || p.name.toLowerCase().includes(query) || String(p.year).includes(query),
+  );
+  const shown = matches
     .slice()
-    .sort((a, b) => a.name.localeCompare(b.name) || a.year - b.year);
+    .sort((a, b) => a.name.localeCompare(b.name) || a.year - b.year)
+    .slice(0, MAX_PICKER_RESULTS);
 
-  const formatButtons = ["Bo3", "Bo5"]
-    .map(
-      (f) => `
-      <button class="option-btn ${state.pickedFormat === f ? "selected" : ""}" data-action="pick-format" data-format="${f}">
-        ${f === "Bo3" ? "Al meglio dei 3 set" : "Al meglio dei 5 set"}
-      </button>`,
-    )
-    .join("");
-
-  const playerButtons = sorted
-    .map(
-      (p) => `
-      <button class="player-btn ${state.pickedPlayerId === p.id ? "selected" : ""}" data-action="pick-player" data-id="${p.id}">
-        ${p.name} <span class="year-tag">${p.year}</span>
-      </button>`,
-    )
-    .join("");
-
-  const canStart = state.pickedFormat && state.pickedPlayerId;
+  const selected = state.pickedPlayerId
+    ? playersData.players.find((p) => p.id === state.pickedPlayerId)
+    : null;
 
   root.innerHTML = `
     <header class="app-header">
-      <h1>Tennis Storico</h1>
-      <p class="tagline">Coach di una carriera</p>
+      <h1>Blind Coach</h1>
+      <p class="tagline">Alleni una carriera senza vedere i numeri</p>
     </header>
-    <section class="setup">
-      <h2>1. Formato del torneo</h2>
-      <div class="option-row">${formatButtons}</div>
+    <section class="panel">
+      <h2>Formato</h2>
+      <div class="option-row">
+        ${["Bo3", "Bo5"]
+          .map(
+            (f) => `<button class="option-btn ${state.pickedFormat === f ? "selected" : ""}"
+              data-action="pick-format" data-format="${f}">${f === "Bo3" ? "3 set" : "5 set"}</button>`,
+          )
+          .join("")}
+      </div>
 
-      <h2>2. Scegli il tuo giocatore-anno</h2>
-      <p class="hint">Le statistiche restano coperte per tutto il torneo: le scoprirai solo dal modo in cui vinci o perdi i set.</p>
-      <div class="player-grid">${playerButtons}</div>
+      <h2>Il tuo giocatore</h2>
+      <p class="hint">
+        ${playersData.players.length} stagioni reali dal 1973 al 2025. Le statistiche restano coperte:
+        le scoprirai solo dal modo in cui vinci o perdi i set.
+      </p>
+      <div class="picker-controls">
+        <input id="player-search" class="search-input" type="search" placeholder="Cerca per nome o anno..."
+               value="${state.query || ""}" autocomplete="off" />
+        <button class="option-btn" data-action="random-player">Sorprendimi</button>
+      </div>
+      ${selected ? `<p class="selected-line">Scelto: <strong>${cardName(selected)} ${selected.year}</strong></p>` : ""}
+      <div class="player-grid">
+        ${shown
+          .map(
+            (p) => `<button class="player-btn ${state.pickedPlayerId === p.id ? "selected" : ""}"
+              data-action="pick-player" data-id="${p.id}">${cardName(p)}<span class="year-tag">${p.year}</span></button>`,
+          )
+          .join("")}
+      </div>
+      ${matches.length > MAX_PICKER_RESULTS ? `<p class="hint">…e altre ${matches.length - MAX_PICKER_RESULTS}. Affina la ricerca.</p>` : ""}
 
-      <button class="primary-btn" data-action="start-tournament" ${canStart ? "" : "disabled"}>
+      <button class="primary-btn" data-action="start-tournament" ${state.pickedFormat && state.pickedPlayerId ? "" : "disabled"}>
         Inizia il torneo
       </button>
     </section>
   `;
+
+  const search = document.getElementById("player-search");
+  if (search && state.focusSearch) {
+    search.focus();
+    search.setSelectionRange(search.value.length, search.value.length);
+  }
 }
 
-function renderLadder() {
+function renderBracket() {
   return `
-    <div class="ladder">
-      ${ROUNDS.map((r, i) => {
-        let cls = "ladder-step";
-        if (i < state.roundIndex) cls += " done";
-        else if (i === state.roundIndex) cls += " active";
-        return `<div class="${cls}">${ROUND_LABELS[r]}</div>`;
+    <div class="bracket">
+      ${ROUNDS.map((round, i) => {
+        const played = state.history.find((h) => h.round === round);
+        let cls = "bracket-round";
+        let detail = "";
+        if (played) {
+          cls += played.result === "vinto" ? " won" : " lost";
+          detail = `<span class="bracket-opp">${shortCardName(played.opponent)}</span>`;
+        } else if (i === state.roundIndex) {
+          cls += " active";
+          detail = `<span class="bracket-opp">${shortCardName(state.opponent)}</span>`;
+        } else {
+          detail = `<span class="bracket-opp muted">—</span>`;
+        }
+        return `<div class="${cls}"><span class="bracket-label">${ROUND_LABELS[round]}</span>${detail}</div>`;
       }).join("")}
     </div>
   `;
 }
 
 function renderVsIntro() {
-  root.innerHTML = `
-    <header class="app-header compact">
-      <h1>Tennis Storico</h1>
-    </header>
-    ${renderLadder()}
-    <section class="vs-intro">
+  const p = state.playerCard;
+  const o = state.opponent;
+  return `
+    ${renderBracket()}
+    <section class="panel vs-intro">
       <h2>${ROUND_LABELS[currentRound()]}</h2>
       <div class="vs-card">
-        <div class="vs-side">${state.playerCard.name} <span class="year-tag">${state.playerCard.year}</span></div>
+        <div class="vs-side">
+          <div class="vs-flag">${flagFor(p.country)}</div>
+          <div class="vs-name">${p.name}</div>
+          <div class="year-tag">${p.year}</div>
+        </div>
         <div class="vs-sep">vs</div>
-        <div class="vs-side">${state.opponent.name} <span class="year-tag">${state.opponent.year}</span></div>
+        <div class="vs-side">
+          <div class="vs-flag">${flagFor(o.country)}</div>
+          <div class="vs-name">${o.name}</div>
+          <div class="year-tag">${o.year}</div>
+        </div>
       </div>
       <button class="primary-btn" data-action="play-set">Gioca il primo set</button>
     </section>
   `;
 }
 
-function renderMatch() {
-  const optionButtons = state.currentOptions
-    .map((opt) => `<button class="tactic-btn" data-action="choose-category" data-key="${opt.key}">${opt.label}</button>`)
-    .join("");
-
-  root.innerHTML = `
-    <header class="app-header compact">
-      <h1>Tennis Storico</h1>
-    </header>
-    ${renderLadder()}
-    <section class="match">
-      <h2>${ROUND_LABELS[currentRound()]}</h2>
-      <div class="score-tally">
-        ${state.playerCard.name} ${state.playerSets} — ${state.opponentSets} ${state.opponent.name}
+function renderScoreboard() {
+  const toWin = SETS_TO_WIN[state.format];
+  const pips = (n) =>
+    Array.from({ length: toWin }, (_, i) => `<span class="pip ${i < n ? "filled" : ""}"></span>`).join("");
+  return `
+    <div class="scoreboard">
+      <div class="sb-side">
+        <span class="sb-name">${shortCardName(state.playerCard)}</span>
+        <span class="pips">${pips(state.playerSets)}</span>
       </div>
-      <p class="hint">Scegli la tua lente tattica per questo set:</p>
-      <div class="tactic-row">${optionButtons}</div>
+      <div class="sb-side right">
+        <span class="pips">${pips(state.opponentSets)}</span>
+        <span class="sb-name">${shortCardName(state.opponent)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderMatch() {
+  return `
+    ${renderBracket()}
+    <section class="panel match">
+      ${renderScoreboard()}
+      <p class="set-label">Set ${state.matchSets.length + 1}</p>
+      <p class="hint">Scegli la tua lente tattica:</p>
+      <div class="tactic-row">
+        ${state.currentOptions
+          .map(
+            (opt) => `<button class="tactic-btn" data-action="choose-category" data-key="${opt.key}">${opt.label}</button>`,
+          )
+          .join("")}
+      </div>
     </section>
   `;
 }
 
 function renderReveal() {
   const r = state.lastReveal;
-  const resultClass = r.won ? "won" : "lost";
-  root.innerHTML = `
-    <header class="app-header compact">
-      <h1>Tennis Storico</h1>
-    </header>
-    ${renderLadder()}
-    <section class="reveal">
-      <div class="reveal-score ${resultClass}">${r.score}</div>
+  return `
+    ${renderBracket()}
+    <section class="panel reveal">
+      <div class="reveal-score ${r.won ? "won" : "lost"}">${r.score}</div>
       <p class="reveal-comment">${r.comment}</p>
-      <div class="score-tally">
-        ${state.playerCard.name} ${state.playerSets} — ${state.opponentSets} ${state.opponent.name}
+      <div class="reveal-tail">
+        ${renderScoreboard()}
+        <button class="primary-btn" data-action="after-reveal">Continua</button>
       </div>
-      <button class="primary-btn" data-action="after-reveal">Continua</button>
     </section>
   `;
 }
 
-function statRow(key, playerVal, opponentVal, usedKeys) {
-  const used = usedKeys.has(key) ? "used-stat" : "";
-  const fmt = (v) => (v == null ? "—" : `${v}%`);
-  return `<tr class="${used}"><td>${STAT_LABELS[key]}</td><td>${fmt(playerVal)}</td><td>${fmt(opponentVal)}</td></tr>`;
-}
-
-function renderMatchStatsTable(matchRecord) {
+function renderStatsTable(matchRecord) {
   const usedKeys = new Set(matchRecord.sets.map((s) => s.categoryKey));
+  const fmt = (v) => (v == null ? "<span class='muted'>n.d.</span>" : `${v}%`);
+
   const rows = engine.statKeys
-    .map((key) => statRow(key, state.playerCard.stats[key], matchRecord.opponent.stats[key], usedKeys))
-    .join("");
-
-  return `
-    <table class="stats-table">
-      <thead><tr><th>Statistica</th><th>${state.playerCard.name}</th><th>${matchRecord.opponent.name}</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
-}
-
-function renderFinal() {
-  const title = state.eliminated
-    ? `Eliminato — ${ROUND_LABELS[currentRound()]}`
-    : "Campione del torneo!";
-
-  const roundsHtml = state.history
-    .map((h) => {
-      const setsHtml = h.sets
-        .map((s) => `<li>${s.categoryLabel}: <strong>${s.score}</strong> — ${s.comment}</li>`)
-        .join("");
-      return `
-        <article class="round-recap">
-          <h3>${ROUND_LABELS[h.round]} vs ${h.opponent.name} <span class="year-tag">${h.opponent.year}</span> — ${h.result}</h3>
-          <ul class="set-list">${setsHtml}</ul>
-          ${renderMatchStatsTable(h)}
-        </article>
-      `;
+    .map((key) => {
+      const mine = state.playerCard.stats[key];
+      const theirs = matchRecord.opponent.stats[key];
+      if (mine == null && theirs == null) return "";
+      const lead = mine != null && theirs != null ? (mine > theirs ? "mine" : "theirs") : "";
+      return `<tr class="${usedKeys.has(key) ? "used-stat" : ""}">
+        <td>${STAT_LABELS[key] || key}</td>
+        <td class="${lead === "mine" ? "lead" : ""}">${fmt(mine)}</td>
+        <td class="${lead === "theirs" ? "lead" : ""}">${fmt(theirs)}</td>
+      </tr>`;
     })
     .join("");
 
-  root.innerHTML = `
-    <header class="app-header compact">
-      <h1>Tennis Storico</h1>
-    </header>
-    <section class="final">
-      <h2>${title}</h2>
-      <p class="hint">Ecco la pagella: tutte le statistiche vere dei match giocati, finalmente svelate.</p>
-      ${roundsHtml}
+  return `<table class="stats-table">
+      <thead><tr><th>Statistica</th><th>${state.playerCard.name}</th><th>${matchRecord.opponent.name}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderSetRecap(set) {
+  const alts = (set.alternatives || [])
+    .slice()
+    .sort((a, b) => (b.probability ?? 0) - (a.probability ?? 0))
+    .map((alt) => {
+      const pctText = alt.probability == null ? "—" : `${Math.round(alt.probability * 100)}%`;
+      return `<li class="${alt.chosen ? "chosen-alt" : ""}">
+        ${alt.label} <span class="alt-prob">${pctText}</span>${alt.chosen ? " <em>← la tua scelta</em>" : ""}
+      </li>`;
+    })
+    .join("");
+
+  return `<li class="set-recap">
+      <div class="set-head"><strong>${set.score}</strong> — ${set.comment}</div>
+      <ul class="alt-list">${alts}</ul>
+    </li>`;
+}
+
+function renderFinal() {
+  const title = !state.eliminated
+    ? "Campione del torneo"
+    : currentRound() === "finale"
+      ? "Finalista — sconfitto all'ultimo atto"
+      : `Eliminato — ${ROUND_LABELS[currentRound()]}`;
+  const recaps = state.history
+    .map(
+      (h) => `<article class="round-recap">
+        <h3>${ROUND_LABELS[h.round]} — ${cardName(h.opponent)} ${h.opponent.year}
+          <span class="result-tag ${h.result}">${h.result}</span></h3>
+        <ul class="set-list">${h.sets.map(renderSetRecap).join("")}</ul>
+        ${renderStatsTable(h)}
+      </article>`,
+    )
+    .join("");
+
+  return `
+    <section class="panel final">
+      <h2 class="final-title ${state.eliminated ? "lost" : "won"}">${title}</h2>
+      <p class="lead-in">
+        ${cardName(state.playerCard)} ${state.playerCard.year} — ecco la pagella:
+        tutte le statistiche vere, e cosa sarebbero valse le opzioni che hai scartato.
+      </p>
+      ${recaps}
       <button class="primary-btn" data-action="restart">Nuovo torneo</button>
     </section>
   `;
@@ -297,40 +378,69 @@ function renderFinal() {
 
 function render() {
   if (!playersData) {
-    root.innerHTML = "<p>Caricamento...</p>";
+    root.innerHTML = "<p class='loading'>Caricamento…</p>";
     return;
   }
-  if (state.screen === "setup") return renderSetup();
-  if (state.screen === "vs-intro") return renderVsIntro();
-  if (state.screen === "match") return renderMatch();
-  if (state.screen === "reveal") return renderReveal();
-  if (state.screen === "final") return renderFinal();
+  if (state.screen === "setup") {
+    renderSetup();
+    return;
+  }
+  const header = `<header class="app-header compact"><h1>Blind Coach</h1></header>`;
+  const body =
+    state.screen === "vs-intro"
+      ? renderVsIntro()
+      : state.screen === "match"
+        ? renderMatch()
+        : state.screen === "reveal"
+          ? renderReveal()
+          : renderFinal();
+  root.innerHTML = header + body;
 }
 
 function resetToSetup() {
-  state = { screen: "setup", pickedFormat: null, pickedPlayerId: null };
+  state = { screen: "setup", pickedFormat: "Bo3", pickedPlayerId: null, query: "", focusSearch: false };
 }
+
+root.addEventListener("input", (event) => {
+  if (event.target.id !== "player-search") return;
+  state.query = event.target.value;
+  state.focusSearch = true;
+  render();
+});
 
 root.addEventListener("click", (event) => {
   const target = event.target.closest("[data-action]");
   if (!target) return;
-  const action = target.dataset.action;
+  state.focusSearch = false;
 
-  if (action === "pick-format") {
-    state.pickedFormat = target.dataset.format;
-  } else if (action === "pick-player") {
-    state.pickedPlayerId = target.dataset.id;
-  } else if (action === "start-tournament") {
-    const playerCard = playersData.players.find((p) => p.id === state.pickedPlayerId);
-    state = newTournamentState(state.pickedFormat, playerCard);
-  } else if (action === "play-set") {
-    startSet();
-  } else if (action === "choose-category") {
-    chooseCategory(target.dataset.key);
-  } else if (action === "after-reveal") {
-    afterReveal();
-  } else if (action === "restart") {
-    resetToSetup();
+  switch (target.dataset.action) {
+    case "pick-format":
+      state.pickedFormat = target.dataset.format;
+      break;
+    case "pick-player":
+      state.pickedPlayerId = target.dataset.id;
+      break;
+    case "random-player": {
+      const pool = playersData.players;
+      state.pickedPlayerId = pool[Math.floor(Math.random() * pool.length)].id;
+      state.query = "";
+      break;
+    }
+    case "start-tournament":
+      state = newTournamentState(state.pickedFormat, playersData.players.find((p) => p.id === state.pickedPlayerId));
+      break;
+    case "play-set":
+      startSet();
+      break;
+    case "choose-category":
+      chooseCategory(target.dataset.key);
+      break;
+    case "after-reveal":
+      afterReveal();
+      break;
+    case "restart":
+      resetToSetup();
+      break;
   }
 
   render();
@@ -339,8 +449,7 @@ root.addEventListener("click", (event) => {
 async function init() {
   resetToSetup();
   render();
-  const response = await fetch("./data/players.json");
-  playersData = await response.json();
+  playersData = await (await fetch("./data/players.json")).json();
   engine = createEngine(playersData);
   render();
 }

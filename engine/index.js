@@ -6,7 +6,7 @@
  */
 import { normalizedDelta, computeMatchupDeltas } from "./normalize.js";
 import { selectCategoryOptions } from "./categories.js";
-import { resolveSet } from "./resolution.js";
+import { resolveSet, winProbability } from "./resolution.js";
 import { CATEGORY_META, pickComment } from "./categoryMeta.js";
 
 /**
@@ -68,5 +68,17 @@ export function createEngine(playersData) {
     };
   }
 
-  return { getCategoryOptions, resolveChoice, statKeys, gapPercentiles };
+  /**
+   * Win probability the player WOULD have had on a category. Strictly for
+   * after-the-fact reporting (the end-of-tournament pagella): showing this
+   * before the choice would hand the player the answer and undo the whole
+   * blind premise.
+   * @returns {number|null} null when the category is missing on either side
+   */
+  function probabilityFor(playerCard, opponentCard, categoryKey) {
+    const delta = normalizedDelta(playerCard.stats, opponentCard.stats, categoryKey, stddevByKey);
+    return delta === null ? null : winProbability(delta);
+  }
+
+  return { getCategoryOptions, resolveChoice, probabilityFor, statKeys, gapPercentiles };
 }

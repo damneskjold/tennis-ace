@@ -16,15 +16,33 @@ const DELTAS = [
 
 const noShuffle = () => 0;
 
-test("ottavi offers the most favorable categories available", () => {
-  const chosen = selectCategoryOptions(DELTAS, "ottavi", GAP_PERCENTILES, [], 3, noShuffle);
-  assert.deepEqual(new Set(chosen), new Set(["big_favor", "good_favor", "mild_favor"]));
+test("ottavi only ever offers categories from the favorable end", () => {
+  // Sampled from a shortlist for variety, so assert the property that matters:
+  // never an option that favors the opponent while better ones went unoffered.
+  for (let i = 0; i < 300; i++) {
+    const chosen = selectCategoryOptions(DELTAS, "ottavi", GAP_PERCENTILES, [], 3, Math.random);
+    for (const key of chosen) {
+      assert.ok(
+        DELTAS.find((d) => d.key === key).delta > 0,
+        `ottavi offered a category favoring the opponent: ${key}`,
+      );
+    }
+  }
 });
 
-test("quarti offers favorable categories but skips the very best ones", () => {
-  const chosen = selectCategoryOptions(DELTAS, "quarti", GAP_PERCENTILES, [], 3, noShuffle);
-  assert.ok(!chosen.includes("big_favor"), `quarti should skip the top pick, got ${chosen}`);
-  assert.ok(chosen.includes("mild_favor"));
+test("ottavi rotates its options between sets instead of showing the same list", () => {
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) {
+    seen.add(selectCategoryOptions(DELTAS, "ottavi", GAP_PERCENTILES, [], 3, Math.random).slice().sort().join(","));
+  }
+  assert.ok(seen.size > 1, "the same three buttons came up every single time");
+});
+
+test("quarti offers favorable categories but skips the very best one", () => {
+  for (let i = 0; i < 200; i++) {
+    const chosen = selectCategoryOptions(DELTAS, "quarti", GAP_PERCENTILES, [], 3, Math.random);
+    assert.ok(!chosen.includes("big_favor"), `quarti should skip the top pick, got ${chosen}`);
+  }
 });
 
 test("finale offers the widest gaps available, with both signs represented", () => {
@@ -45,14 +63,18 @@ test("button order never correlates with quality (otherwise the game solves itse
   // button 1 forever. Over many draws each position must see the top pick
   // roughly equally often.
   const positionsOfBest = [0, 0, 0];
-  const trials = 3000;
-  for (let i = 0; i < trials; i++) {
+  let offered = 0;
+  for (let i = 0; i < 4000; i++) {
     const chosen = selectCategoryOptions(DELTAS, "ottavi", GAP_PERCENTILES, [], 3, Math.random);
-    positionsOfBest[chosen.indexOf("big_favor")]++;
+    const slot = chosen.indexOf("big_favor");
+    if (slot === -1) continue; // not in this draw's shortlist sample
+    positionsOfBest[slot]++;
+    offered++;
   }
+  assert.ok(offered > 1000, "the best option was hardly ever offered");
   for (const count of positionsOfBest) {
-    const share = count / trials;
-    assert.ok(share > 0.25 && share < 0.42, `best option lands in one slot too often: ${positionsOfBest}`);
+    const share = count / offered;
+    assert.ok(share > 0.27 && share < 0.4, `best option lands in one slot too often: ${positionsOfBest}`);
   }
 });
 
