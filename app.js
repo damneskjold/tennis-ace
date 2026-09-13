@@ -9,7 +9,8 @@ const ROUND_LABELS = {
   finale: "Finale",
 };
 const SETS_TO_WIN = { Bo3: 2, Bo5: 3 };
-const MAX_PICKER_RESULTS = 60;
+const PLAYER_DRAW_MS = 2300;
+const OPPONENT_DRAW_MS = 1200;
 
 const STAT_LABELS = {
   ace_pct: "% ace",
@@ -46,6 +47,62 @@ const cardName = (card) => `${flagFor(card.country)} ${card.name}`.trim();
 const surname = (card) => card.name.split(" ").slice(1).join(" ") || card.name;
 const shortCardName = (card) => `${flagFor(card.country)} ${surname(card)}`.trim();
 
+/**
+ * Slot-machine draw: flick through random cards, slowing down, then land on
+ * the one already decided. The result is picked before the animation starts --
+ * the spinning is theatre, not the draw itself.
+ */
+let animationToken = 0;
+
+function slotCardHtml(card, landed) {
+  return `<div class="slot-card ${landed ? "landed" : ""}">
+      <div class="slot-flag">${flagFor(card.country) || "🎾"}</div>
+      <div class="slot-name">${card.name}</div>
+      <div class="slot-year">${card.year}</div>
+    </div>`;
+}
+
+function spinTo(slotId, finalCard, durationMs, onDone) {
+  const token = ++animationToken;
+  const el = document.getElementById(slotId);
+  if (!el) return;
+
+  const settle = () => {
+    el.innerHTML = slotCardHtml(finalCard, true);
+    onDone();
+  };
+
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    settle();
+    return;
+  }
+
+  const pool = playersData.players;
+  const start = performance.now();
+  let lastSwap = 0;
+
+  function frame(now) {
+    // A newer draw (or a re-render) has superseded this one.
+    if (token !== animationToken || !el.isConnected) return;
+
+    const t = Math.min(1, (now - start) / durationMs);
+    const interval = 45 + 400 * t ** 3; // flicks fast, then drags out
+    if (now - lastSwap >= interval) {
+      lastSwap = now;
+      el.innerHTML = slotCardHtml(pool[Math.floor(Math.random() * pool.length)], false);
+    }
+
+    if (t < 1) requestAnimationFrame(frame);
+    else settle();
+  }
+
+  requestAnimationFrame(frame);
+}
+
+function randomCard() {
+  return playersData.players[Math.floor(Math.random() * playersData.players.length)];
+}
+
 function randomOpponent(excludeIds, excludePlayerIds) {
   const pool = playersData.players.filter((p) => !excludeIds.has(p.id) && !excludePlayerIds.has(p.player_id));
   return pool[Math.floor(Math.random() * pool.length)];
@@ -62,6 +119,7 @@ function newTournamentState(format, playerCard) {
     playerCard,
     roundIndex: 0,
     opponent,
+    opponentRevealed: false,
     facedIds: new Set([playerCard.id, opponent.id]),
     facedPlayerIds,
     usedCategories: new Set(),
@@ -139,29 +197,17 @@ function afterReveal() {
   state.opponent = randomOpponent(state.facedIds, state.facedPlayerIds);
   state.facedIds.add(state.opponent.id);
   state.facedPlayerIds.add(state.opponent.player_id);
+  state.opponentRevealed = false;
   state.screen = "vs-intro";
 }
 
 function renderSetup() {
-  const query = (state.query || "").trim().toLowerCase();
-  const matches = playersData.players.filter(
-    (p) => !query || p.name.toLowerCase().includes(query) || String(p.year).includes(query),
-  );
-  const shown = matches
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name) || a.year - b.year)
-    .slice(0, MAX_PICKER_RESULTS);
-
-  const selected = state.pickedPlayerId
-    ? playersData.players.find((p) => p.id === state.pickedPlayerId)
-    : null;
-
   root.innerHTML = `
     <header class="app-header">
       <h1>Blind Coach</h1>
       <p class="tagline">Alleni una carriera senza vedere i numeri</p>
     </header>
-    <section class="panel">
+    <section class="panel setup">
       <h2>Formato</h2>
       <div class="option-row">
         ${["Bo3", "Bo5"]
@@ -171,38 +217,36 @@ function renderSetup() {
           )
           .join("")}
       </div>
-
-      <h2>Il tuo giocatore</h2>
       <p class="hint">
-        ${playersData.players.length} stagioni reali dal 1973 al 2025. Le statistiche restano coperte:
-        le scoprirai solo dal modo in cui vinci o perdi i set.
+        ${playersData.players.length} stagioni reali dal 1973 al 2025. Il giocatore che allenerai
+        viene estratto a sorte — e le sue statistiche restano coperte: le scoprirai solo dal modo
+        in cui vinci o perdi i set.
       </p>
-      <div class="picker-controls">
-        <input id="player-search" class="search-input" type="search" placeholder="Cerca per nome o anno..."
-               value="${state.query || ""}" autocomplete="off" />
-        <button class="option-btn" data-action="random-player">Sorprendimi</button>
-      </div>
-      ${selected ? `<p class="selected-line">Scelto: <strong>${cardName(selected)} ${selected.year}</strong></p>` : ""}
-      <div class="player-grid">
-        ${shown
-          .map(
-            (p) => `<button class="player-btn ${state.pickedPlayerId === p.id ? "selected" : ""}"
-              data-action="pick-player" data-id="${p.id}">${cardName(p)}<span class="year-tag">${p.year}</span></button>`,
-          )
-          .join("")}
-      </div>
-      ${matches.length > MAX_PICKER_RESULTS ? `<p class="hint">…e altre ${matches.length - MAX_PICKER_RESULTS}. Affina la ricerca.</p>` : ""}
+      <button class="primary-btn draw-btn" data-action="draw-player">Estrai il tuo giocatore</button>
+    </section>
+  `;
+}
 
-      <button class="primary-btn" data-action="start-tournament" ${state.pickedFormat && state.pickedPlayerId ? "" : "disabled"}>
-        Inizia il torneo
+function renderDraw() {
+  root.innerHTML = `
+    <header class="app-header compact"><h1>Blind Coach</h1></header>
+    <section class="panel draw-screen">
+      <p class="draw-label">${state.drawComplete ? "Allenerai" : "Estrazione in corso…"}</p>
+      <div id="draw-slot" class="slot">${slotCardHtml(state.playerCard, state.drawComplete)}</div>
+      <button class="primary-btn" data-action="start-tournament" ${state.drawComplete ? "" : "hidden"}>
+        Porta ${surname(state.playerCard)} al titolo
       </button>
     </section>
   `;
 
-  const search = document.getElementById("player-search");
-  if (search && state.focusSearch) {
-    search.focus();
-    search.setSelectionRange(search.value.length, search.value.length);
+  if (!state.drawComplete) {
+    spinTo("draw-slot", state.playerCard, PLAYER_DRAW_MS, () => {
+      state.drawComplete = true;
+      const button = root.querySelector('[data-action="start-tournament"]');
+      if (button) button.hidden = false;
+      const label = root.querySelector(".draw-label");
+      if (label) label.textContent = "Allenerai";
+    });
   }
 }
 
@@ -218,7 +262,11 @@ function renderBracket() {
           detail = `<span class="bracket-opp">${shortCardName(played.opponent)}</span>`;
         } else if (i === state.roundIndex) {
           cls += " active";
-          detail = `<span class="bracket-opp">${shortCardName(state.opponent)}</span>`;
+          // Naming the opponent here while the draw is still spinning would
+          // give away the result before the slot lands.
+          detail = state.opponentRevealed
+            ? `<span class="bracket-opp">${shortCardName(state.opponent)}</span>`
+            : `<span class="bracket-opp muted">estrazione…</span>`;
         } else {
           detail = `<span class="bracket-opp muted">—</span>`;
         }
@@ -230,25 +278,26 @@ function renderBracket() {
 
 function renderVsIntro() {
   const p = state.playerCard;
-  const o = state.opponent;
   return `
     ${renderBracket()}
     <section class="panel vs-intro">
       <h2>${ROUND_LABELS[currentRound()]}</h2>
       <div class="vs-card">
         <div class="vs-side">
-          <div class="vs-flag">${flagFor(p.country)}</div>
-          <div class="vs-name">${p.name}</div>
-          <div class="year-tag">${p.year}</div>
+          <div class="slot-card landed">
+            <div class="slot-flag">${flagFor(p.country) || "🎾"}</div>
+            <div class="slot-name">${p.name}</div>
+            <div class="slot-year">${p.year}</div>
+          </div>
         </div>
         <div class="vs-sep">vs</div>
         <div class="vs-side">
-          <div class="vs-flag">${flagFor(o.country)}</div>
-          <div class="vs-name">${o.name}</div>
-          <div class="year-tag">${o.year}</div>
+          <div id="opp-slot" class="slot compact">${slotCardHtml(state.opponent, state.opponentRevealed)}</div>
         </div>
       </div>
-      <button class="primary-btn" data-action="play-set">Gioca il primo set</button>
+      <button class="primary-btn" data-action="play-set" ${state.opponentRevealed ? "" : "hidden"}>
+        Gioca il primo set
+      </button>
     </section>
   `;
 }
@@ -385,6 +434,11 @@ function render() {
     renderSetup();
     return;
   }
+  if (state.screen === "draw") {
+    renderDraw();
+    return;
+  }
+
   const header = `<header class="app-header compact"><h1>Blind Coach</h1></header>`;
   const body =
     state.screen === "vs-intro"
@@ -395,39 +449,36 @@ function render() {
           ? renderReveal()
           : renderFinal();
   root.innerHTML = header + body;
+
+  if (state.screen === "vs-intro" && !state.opponentRevealed) {
+    spinTo("opp-slot", state.opponent, OPPONENT_DRAW_MS, () => {
+      state.opponentRevealed = true;
+      const button = root.querySelector('[data-action="play-set"]');
+      if (button) button.hidden = false;
+    });
+  }
 }
 
 function resetToSetup() {
-  state = { screen: "setup", pickedFormat: "Bo3", pickedPlayerId: null, query: "", focusSearch: false };
+  state = { screen: "setup", pickedFormat: "Bo3" };
 }
-
-root.addEventListener("input", (event) => {
-  if (event.target.id !== "player-search") return;
-  state.query = event.target.value;
-  state.focusSearch = true;
-  render();
-});
 
 root.addEventListener("click", (event) => {
   const target = event.target.closest("[data-action]");
   if (!target) return;
-  state.focusSearch = false;
 
   switch (target.dataset.action) {
     case "pick-format":
       state.pickedFormat = target.dataset.format;
       break;
-    case "pick-player":
-      state.pickedPlayerId = target.dataset.id;
+    case "draw-player":
+      // The card is decided here; the animation that follows only reveals it.
+      state.playerCard = randomCard();
+      state.drawComplete = false;
+      state.screen = "draw";
       break;
-    case "random-player": {
-      const pool = playersData.players;
-      state.pickedPlayerId = pool[Math.floor(Math.random() * pool.length)].id;
-      state.query = "";
-      break;
-    }
     case "start-tournament":
-      state = newTournamentState(state.pickedFormat, playersData.players.find((p) => p.id === state.pickedPlayerId));
+      state = newTournamentState(state.pickedFormat, state.playerCard);
       break;
     case "play-set":
       startSet();

@@ -1,3 +1,9 @@
+> **Nota**: questo è il brief originale, tenuto com'era scritto perché il suo
+> valore sta nel ragionamento di partenza. Diverse decisioni sono cambiate
+> durante l'implementazione, quasi sempre perché una misurazione ha smentito
+> un'ipotesi. L'elenco degli scostamenti, con le motivazioni, è in fondo:
+> [Cosa è cambiato](#cosa-è-cambiato-rispetto-a-questo-brief).
+
 # Tennis Storico — Coach di una carriera
 
 Gioco hobbistico ispirato nello spirito (non nella meccanica) a
@@ -189,3 +195,88 @@ vittoria del set (non fasce fisse con coin flip interno)
 4. Frontend: bracket, loop match/set, schermata finale con pagella
 5. Solo dopo la v1 funzionante: estendere a Top 50, poi eventualmente
 alla modalità "all-star"
+
+---
+
+## Cosa è cambiato rispetto a questo brief
+
+Tutti i punti 1-4 dei "Prossimi passi" sono stati completati. Durante il
+lavoro alcune scelte del brief si sono rivelate sbagliate alla prova dei
+numeri, e sono state cambiate:
+
+### Nome: **Blind Coach**
+
+"Tennis Storico" descriveva il dataset, non il gioco. Il nome attuale nomina
+il meccanismo che lo distingue.
+
+### Perimetro dati: Top 25 dal 1973, non Top 50 dal 2000
+
+Il brief sceglieva Top 50 temendo che il Top 25 fosse "troppo schiacciato
+verso l'alto, poca varietà". Misurato su 2621 carte contro 1319: la
+dispersione delle statistiche di profilo è **praticamente identica** (l'ace%
+ha addirittura dispersione leggermente maggiore nel Top 25). La differenza si
+concentra nelle statistiche di livello, che aggiungono range ma non varietà
+tattica. E gli "specialisti dai profili anomali" che il brief voleva
+preservare — Karlovic, Isner, Schwartzman — sono comunque dentro il Top 25.
+
+Gli anni sono partiti dal 1973 (inizio del ranking ATP) invece che dal 2000,
+grazie alla seconda famiglia di statistiche qui sotto.
+
+### Statistiche: 18 categorie in due famiglie, non 12
+
+Le statistiche di servizio e risposta **non esistono prima del 1991** nel
+dataset di origine (verificato: 0% dei match del 1985 le ha, 86% di quelli
+del 1991). Un giocatore anni '70-'80 avrebbe avuto 2 sole categorie
+utilizzabili, troppo poche per giocare un match.
+
+Sono state quindi aggiunte 6 categorie derivate dal solo punteggio,
+disponibili in ogni epoca: game vinti, vittorie senza perdere set, rimonte da
+sotto di un set, primi set vinti, rese su terra e su cemento. Un incrocio fra
+epoche diverse condivide in media 7,6 categorie (minimo 6); il motore scarta
+da solo quelle mancanti su un lato, quindi una partita Borg-Sinner si gioca
+automaticamente su temperamento e risultati invece che su tecnica.
+
+### Selezione delle categorie: rank-based, non a soglie sui percentili
+
+Il meccanismo descritto nel brief (classificare ogni categoria confrontando
+|delta| con i percentili del pool) è stato implementato e **misurato**: su
+4000 tornei simulati non produceva nessuna curva di difficoltà
+(57.5% / 57.8% / 50.1% / 49.8% di match vinti nei quattro turni). Causa: il
+75% dei matchup non ha tre categorie insieme ampie e a favore del giocatore,
+e il 43% non ne ha tre strette, quindi il fallback ai tier adiacenti riempiva
+i bottoni con l'opposto di quanto richiesto.
+
+Sostituito con una selezione per rango dentro il singolo matchup, che
+restituisce sempre ciò che il turno chiede. I percentili restano calcolati e
+salvati, ma come diagnostica.
+
+### La finale: scarti massimi a segno misto, non scarti minimi
+
+Il brief voleva la finale come "vero coin-flip" con sole categorie a scarto
+minimo. Il problema: con scarti nulli **qualunque bottone è lo stesso 50/50**,
+quindi tutto ciò che il giocatore ha imparato sul suo giocatore-anno vale
+esattamente zero nel turno che decide il torneo — l'opposto della promessa del
+gioco.
+
+La finale offre ora gli scarti **più ampi** disponibili, garantendo entrambi i
+segni: l'aspettativa resta onesta (50%), ma una opzione può valere l'80% e
+un'altra il 20%. Chi ha capito che tipo di giocatore sta allenando vince il
+72% delle finali invece del 49%.
+
+### Scelta del giocatore: estrazione casuale
+
+Il brief non lo specificava. Scelta: il giocatore-anno è **estratto a sorte**
+(giocatore e annata), come in 82-0, non selezionato da una lista.
+
+### Fonte dati
+
+`JeffSackmann/tennis_atp` è stato rimosso da GitHub dopo metà 2026. Si usa un
+mirror archiviale — vedi [`DATA_SOURCE.md`](DATA_SOURCE.md).
+
+### Ancora da fare
+
+- Modalità **all-star** (punto 5): non iniziata. Il vincolo del 1991 non la
+  blocca più, visto che gli anni '70-'80 hanno ora le loro categorie.
+- **Calibrazione** della costante logistica (`LOGISTIC_K = 0.65`): scelta a
+  occhio, mai calibrata contro un obiettivo esplicito di difficoltà.
+- **Deploy** su GitHub Pages.

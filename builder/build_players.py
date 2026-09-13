@@ -29,7 +29,12 @@ from pathlib import Path
 # point after mid-2026; this points at a maintained archival mirror instead
 # (see docs/DATA_SOURCE.md for details).
 RAW_BASE = "https://raw.githubusercontent.com/Aneeshers/tennis-sackmann-archive/main/atp"
+# Played but unfinished: the games that were played still count.
 INCOMPLETE_MARKERS = ("RET", "W/O", "WEA", "DEF", "ABN")
+# Never played at all -- a withdrawal or a default. These aren't matches and
+# don't belong in a win-loss record (it's why our first build had Sinner 2024
+# at 81 matches against Wikipedia's 73-6 = 79).
+NOT_PLAYED_MARKERS = ("W/O", "DEF")
 
 # Serve and return categories come from the per-match stat columns, which
 # Sackmann only has from 1991 on (verified: 1985 has 0% of matches with
@@ -178,6 +183,9 @@ def add_score_stats(agg_winner: dict, agg_loser: dict, row: dict) -> None:
 
     # A retirement still counts in the win-loss record, but its partial score
     # can't be trusted for games/sets breakdowns.
+    if any(marker in score for marker in NOT_PLAYED_MARKERS):
+        return
+
     incomplete = any(marker in score for marker in INCOMPLETE_MARKERS)
     agg_winner["matches_won"] += 1
     agg_winner["matches_counted"] += 1
