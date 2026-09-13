@@ -26,6 +26,12 @@ export const CATEGORY_META = {
   return_games_won_pct: { label: "Vai a caccia del break", flavor: "risposta" },
   tiebreaks_won_pct: { label: "Giocala punto a punto", flavor: "tenuta" },
   deciding_set_won_pct: { label: "Gestisci la pressione del set decisivo", flavor: "tenuta" },
+  comeback_win_pct: { label: "Rimonta, non mollare", flavor: "tenuta" },
+  games_won_pct: { label: "Lotta su ogni game", flavor: "rendimento" },
+  straight_sets_win_pct: { label: "Chiudila in fretta", flavor: "rendimento" },
+  first_set_win_pct: { label: "Parti forte da subito", flavor: "rendimento" },
+  clay_win_pct: { label: "Falla diventare una battaglia sul rosso", flavor: "superficie" },
+  hard_win_pct: { label: "Gioca il tennis veloce del cemento", flavor: "superficie" },
 };
 
 const COMMENTS = {
@@ -81,6 +87,34 @@ const COMMENTS = {
     tiebreak: {
       win: ["Al tie-break sei un muro, set tuo ({score}).", "Freddezza totale al momento della verità ({score})."],
       loss: ["Al tie-break tradisce l'emozione ({score}).", "Il momento della verità non sorride ({score})."],
+    },
+  },
+  rendimento: {
+    dominant: {
+      win: ["Ritmo insostenibile, game dopo game ({score}).", "Macina il campo e non concede nulla ({score})."],
+      loss: ["Mai in partita, sempre a rincorrere ({score}).", "Ritmo subito, set mai in discussione ({score})."],
+    },
+    close: {
+      win: ["Rosicchia un game alla volta fino a passare ({score}).", "Set sporco ma portato a casa ({score})."],
+      loss: ["Un game di troppo lasciato per strada ({score}).", "Set in equilibrio fino al passo falso ({score})."],
+    },
+    tiebreak: {
+      win: ["Game su game fino al tie-break, e lì non sbagli ({score}).", "Nessuno molla niente, la spunti tu ({score})."],
+      loss: ["Game su game fino al tie-break, dove si spegne ({score}).", "Equilibrio totale, ma la decide lui ({score})."],
+    },
+  },
+  superficie: {
+    dominant: {
+      win: ["Il campo gioca per te, avversario spaesato ({score}).", "Superficie perfetta per le tue corde ({score})."],
+      loss: ["Campo che non ti si addice per niente ({score}).", "Mai a tuo agio su questa superficie ({score})."],
+    },
+    close: {
+      win: ["Il campo ti dà quel poco che serve ({score}).", "Ti adatti meglio nei momenti giusti ({score})."],
+      loss: ["Fatichi a trovare le misure sul campo ({score}).", "L'adattamento non arriva in tempo ({score})."],
+    },
+    tiebreak: {
+      win: ["Superficie in equilibrio, la decidi tu ({score}).", "Nessun vantaggio dal campo, ma la spunti ({score})."],
+      loss: ["Superficie in equilibrio, e la decide lui ({score}).", "Il campo non aiuta nessuno dei due, ma perdi tu ({score})."],
     },
   },
 };

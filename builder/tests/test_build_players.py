@@ -17,7 +17,7 @@ FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
 def main() -> int:
-    result = build(years=[2021], top_n=2, cache_dir=FIXTURES_DIR)
+    result = build(years=[2021], top_n=2, cache_dir=FIXTURES_DIR, min_matches=1)
 
     assert result["meta"]["player_count"] == 2, result["meta"]
     by_name = {p["name"]: p for p in result["players"]}

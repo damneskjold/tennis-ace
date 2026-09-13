@@ -33,6 +33,9 @@ test("pickComment throws on an unknown category", () => {
 test("every category has a non-empty Italian label", () => {
   for (const [key, meta] of Object.entries(CATEGORY_META)) {
     assert.ok(meta.label && meta.label.length > 3, `category ${key} is missing a label`);
-    assert.ok(["servizio", "risposta", "tenuta"].includes(meta.flavor), `category ${key} has an unknown flavor`);
+    assert.ok(
+      ["servizio", "risposta", "tenuta", "rendimento", "superficie"].includes(meta.flavor),
+      `category ${key} has an unknown flavor: ${meta.flavor}`,
+    );
   }
 });

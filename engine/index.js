@@ -31,7 +31,15 @@ export function createEngine(playersData) {
   function getCategoryOptions(playerCard, opponentCard, round, usedCategories, optionCount = 3, random = Math.random) {
     const deltas = computeMatchupDeltas(playerCard.stats, opponentCard.stats, statKeys, stddevByKey);
     const keys = selectCategoryOptions(deltas, round, gapPercentiles, usedCategories, optionCount, random);
-    return keys.map((key) => ({ key, label: CATEGORY_META[key].label }));
+    return keys.map((key) => {
+      const meta = CATEGORY_META[key];
+      if (!meta) {
+        // players.json carries a category the engine has no label for: the
+        // builder and categoryMeta.js have drifted apart.
+        throw new Error(`No CATEGORY_META entry for "${key}" -- data and engine are out of sync`);
+      }
+      return { key, label: meta.label };
+    });
   }
 
   /**
