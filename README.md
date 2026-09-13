@@ -27,12 +27,20 @@ mancava del tutto: dover scegliere *cosa puoi permetterti*.
 
 ## Stato
 
-Design chiuso e validato per simulazione. Implementazione da fare:
+Giocabile dall'inizio alla fine, verificato in browser (Playwright).
 
-- [ ] Builder: 8 categorie consolidate, Overall, superfici con avvicinamento alla media
-- [ ] Motore: costi, crediti, stanchezza, colpo del campione, ricalibrazione della curva
-- [ ] UI: profilo visibile, stelline avversario, Overall, contatore crediti
-- [ ] Playtest
+- [x] Builder: 8 categorie consolidate, Overall, superfici con avvicinamento alla media
+- [x] Motore: costi, crediti, stanchezza, colpo del campione, curva ricalibrata (`LOGISTIC_K = 0.45`, vedi `engine/v1/CALIBRATION.md`)
+- [x] UI: profilo visibile (`index-v1.html`, `app-v1.js`, `style-v1.css`), stelline avversario, Overall, contatore crediti
+- [ ] Playtest umano
+
+## Eseguire la v1
+
+```
+python3 -m http.server 8000
+```
+
+poi apri `http://localhost:8000/index-v1.html` (la v0 resta su `index.html`).
 
 ## Dati
 

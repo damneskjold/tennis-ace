@@ -151,11 +151,23 @@ anche in finale a crediti bassi.
   è casuale e l'Overall è visibile, quindi la difficoltà di un turno è quella
   che ti capita.
 
-## Da tarare
+## Stato dell'implementazione
 
-`LOGISTIC_K` (la pendenza della curva) va ricalibrato insieme ai costi, perché
-la risoluzione cambia. Il valore v0 (0.65) è un punto di partenza, non una
-scelta motivata.
+Motore e builder completi e testati (66 test), UI giocabile dall'inizio alla
+fine (`index-v1.html`) e verificata in browser con Playwright — incluso un
+controllo automatico che nessun numero vero dell'avversario trapeli prima
+della pagella. `LOGISTIC_K` è stato ricalibrato a 0.45 contro obiettivi
+espliciti, non ereditato dalla v0: dettagli e numeri in
+[`engine/v1/CALIBRATION.md`](../engine/v1/CALIBRATION.md).
+
+Due bug trovati e corretti durante la verifica in browser:
+- l'Overall dell'avversario era scritto quasi bianco su sfondo quasi bianco
+  (stile pensato per lo sfondo scuro dell'intestazione, riusato per errore nel
+  pannello chiaro della schermata "vs")
+- la riga del costo nel reveal appariva insieme al punteggio, prima del
+  commento narrativo, invece di arrivare con esso
+
+Manca il playtest umano.
 
 ## In memoria, dopo la v1
 
