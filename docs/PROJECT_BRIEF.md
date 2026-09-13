@@ -263,6 +263,15 @@ segni: l'aspettativa resta onesta (50%), ma una opzione può valere l'80% e
 un'altra il 20%. Chi ha capito che tipo di giocatore sta allenando vince il
 72% delle finali invece del 49%.
 
+### Taccuino durante il match
+
+Non previsto dal brief, ma necessario: il brief dà per scontato che il
+giocatore "impari che il suo giocatore è forte a rete al turno 1 e rigiochi
+quella carta più avanti", il che richiede di ricordarsi com'era andata. Il
+taccuino mostra, mentre scegli, le lenti già giocate e con quale punteggio —
+nel match in corso e raggruppate per lente nei turni precedenti. Nessuna
+statistica vera: quelle restano coperte fino alla pagella.
+
 ### Scelta del giocatore: estrazione casuale
 
 Il brief non lo specificava. Scelta: il giocatore-anno è **estratto a sorte**

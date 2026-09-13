@@ -320,6 +320,61 @@ function renderScoreboard() {
   `;
 }
 
+/**
+ * What the player has earned the right to know: which lens they played and
+ * how heavily it won or lost. Never a stat value -- the numbers stay covered
+ * until the pagella, or the game becomes a memory test.
+ */
+function renderNotebook() {
+  if (state.matchSets.length === 0 && state.history.length === 0) return "";
+
+  const thisMatch = state.matchSets
+    .map(
+      (set, i) => `<li class="${set.won ? "won" : "lost"}">
+        <span class="nb-set">Set ${i + 1}</span>
+        <span class="nb-cat">${set.categoryLabel}</span>
+        <span class="nb-score">${set.score}</span>
+      </li>`,
+    )
+    .join("");
+
+  // Earlier rounds, grouped by lens: the useful question isn't "what happened
+  // in the quarters", it's "what do I know about my player on this axis".
+  const byCategory = new Map();
+  for (const round of state.history) {
+    for (const set of round.sets) {
+      if (!byCategory.has(set.categoryLabel)) byCategory.set(set.categoryLabel, []);
+      byCategory.get(set.categoryLabel).push({ score: set.score, won: set.won, round: ROUND_LABELS[round.round] });
+    }
+  }
+
+  const past = [...byCategory.entries()]
+    .map(
+      ([label, entries]) => `<li>
+        <span class="nb-cat">${label}</span>
+        <span class="nb-history">${entries
+          .map((e) => `<span class="${e.won ? "won" : "lost"}">${e.score}</span>`)
+          .join(" · ")}</span>
+      </li>`,
+    )
+    .join("");
+
+  return `
+    <div class="notebook">
+      <h3 class="notebook-title">Taccuino</h3>
+      ${thisMatch ? `<ul class="nb-list">${thisMatch}</ul>` : `<p class="hint nb-empty">Primo set di questo match.</p>`}
+      ${
+        past
+          ? `<details class="nb-past"${state.notebookOpen ? " open" : ""}>
+              <summary>Nei turni precedenti (${byCategory.size} ${byCategory.size === 1 ? "lente provata" : "lenti provate"})</summary>
+              <ul class="nb-list grouped">${past}</ul>
+            </details>`
+          : ""
+      }
+    </div>
+  `;
+}
+
 function renderMatch() {
   return `
     ${renderBracket()}
@@ -334,6 +389,7 @@ function renderMatch() {
           )
           .join("")}
       </div>
+      ${renderNotebook()}
     </section>
   `;
 }
@@ -449,6 +505,15 @@ function render() {
           ? renderReveal()
           : renderFinal();
   root.innerHTML = header + body;
+
+  // <details> toggle doesn't bubble, so it can't go through the delegated
+  // click handler; remember the open state across re-renders directly.
+  const notebookPast = root.querySelector(".nb-past");
+  if (notebookPast) {
+    notebookPast.addEventListener("toggle", () => {
+      state.notebookOpen = notebookPast.open;
+    });
+  }
 
   if (state.screen === "vs-intro" && !state.opponentRevealed) {
     spinTo("opp-slot", state.opponent, OPPONENT_DRAW_MS, () => {

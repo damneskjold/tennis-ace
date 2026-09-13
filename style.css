@@ -415,6 +415,101 @@ button {
   transform: translateY(-1px);
 }
 
+/* --- notebook: what the player has earned, never a stat value --- */
+.notebook {
+  margin-top: 1.3rem;
+  padding-top: 0.9rem;
+  border-top: 2px dashed #e3eae3;
+}
+
+.notebook-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  margin: 0 0 0.5rem;
+}
+
+.nb-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.nb-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.28rem 0;
+  border-bottom: 1px solid #f1f5f1;
+}
+
+.nb-list li:last-child {
+  border-bottom: none;
+}
+
+.nb-set {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  min-width: 2.8rem;
+}
+
+.nb-cat {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-score {
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.nb-list li.won .nb-score {
+  color: var(--won);
+}
+
+.nb-list li.lost .nb-score {
+  color: var(--lost);
+}
+
+.nb-history {
+  flex-shrink: 0;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.nb-history .won {
+  color: var(--won);
+}
+
+.nb-history .lost {
+  color: var(--lost);
+}
+
+.nb-empty {
+  margin: 0;
+}
+
+.nb-past {
+  margin-top: 0.6rem;
+}
+
+.nb-past summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--court-deep);
+  font-weight: 600;
+  padding: 0.25rem 0;
+}
+
+.nb-past summary:hover {
+  text-decoration: underline;
+}
+
 /* --- reveal, in two beats: score lands first, comment follows --- */
 .reveal {
   text-align: center;

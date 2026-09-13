@@ -30,7 +30,15 @@ Funzionante e giocabile dall'inizio alla fine. Fatto:
 - **Motore** — normalizzazione, selezione categorie con curva di difficoltà
   misurata, risoluzione probabilistica del set (31 test)
 - **Frontend** — estrazione animata, tabellone, loop match/set, reveal in due
-  tempi, pagella con controfattuali
+  tempi, taccuino, pagella con controfattuali
+
+Il **taccuino** è il ciclo di apprendimento del gioco: mentre scegli vedi
+quali lenti hai già giocato e con che punteggio le hai vinte o perse, nel
+match in corso e raggruppate per lente nei turni precedenti. Mai una
+statistica vera — quelle restano coperte fino alla pagella, altrimenti il
+gioco diventa un esercizio di memoria. Il *quanto* (6-1 contro 7-6) è invece
+l'unica informazione con cui puoi dedurre chi stai allenando, ed è tua di
+diritto: l'hai guadagnata sul campo.
 
 Da fare:
 
@@ -39,10 +47,11 @@ Da fare:
 - **Calibrare `LOGISTIC_K`** (oggi 0.65, scelto a occhio) contro un obiettivo
   esplicito di difficoltà
 - **Deploy** su GitHub Pages
-- Aperto: il ciclo di apprendimento è corto (4 match per torneo, ~10 set) e
-  ogni torneo riparte da un giocatore diverso, quindi quello che impari non si
-  accumula mai. Una modalità "carriera" — stesso giocatore per più tornei —
-  darebbe respiro alla premessa del gioco
+- Aperto: dentro al singolo torneo il taccuino ora fa il suo lavoro, ma fra un
+  torneo e l'altro non si accumula nulla — esce un giocatore nuovo e riparti da
+  zero. Una modalità **carriera** (stesso giocatore estratto per più tornei di
+  fila) darebbe respiro alla premessa, ed è letteralmente il sottotitolo del
+  brief originale
 
 ## Dati
 
