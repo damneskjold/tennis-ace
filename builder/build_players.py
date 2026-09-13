@@ -69,12 +69,24 @@ SCORE_STAT_KEYS = [
     "straight_sets_win_pct",
     "comeback_win_pct",
     "first_set_win_pct",
-    "clay_win_pct",
-    "hard_win_pct",
+    "slow_win_pct",
+    "fast_win_pct",
 ]
 
-# A surface stat on a handful of matches is noise, not a profile.
-MIN_SURFACE_MATCHES = 8
+# Surface as a style of play, not a venue: "fast ball" is hard, grass and
+# carpet together (grass isn't a third style -- it belongs with the fast
+# stuff), "slow ball" is clay.
+FAST_SURFACES = {"hard", "grass", "carpet"}
+SLOW_SURFACES = {"clay"}
+
+# Surface rates rest on a handful of matches, so instead of dropping the thin
+# ones (a cutoff at 8 matches threw out 102 cards -- Sampras, Agassi, late
+# Federer, Roddick, Isner, Karlovic: skipping the clay season *is* the
+# fast-court specialist's profile, not a data gap) each rate is pulled toward
+# the pool mean in proportion to how few matches back it. SHRINKAGE_MATCHES is
+# that pull expressed in matches: a player with this many of them sits halfway
+# between their own rate and the pool's.
+SHRINKAGE_MATCHES = 10
 
 STAT_KEYS = SERVE_RETURN_STAT_KEYS + SCORE_STAT_KEYS
 
@@ -127,8 +139,8 @@ def new_agg() -> dict:
         "wins_complete": 0, "straight_set_wins": 0,
         "lost_first_set": 0, "comeback_wins": 0,
         "first_sets_won": 0, "first_sets_played": 0,
-        "clay_won": 0, "clay_played": 0,
-        "hard_won": 0, "hard_played": 0,
+        "slow_won": 0, "slow_played": 0,
+        "fast_won": 0, "fast_played": 0,
     }
 
 
@@ -192,14 +204,14 @@ def add_score_stats(agg_winner: dict, agg_loser: dict, row: dict) -> None:
     agg_loser["matches_counted"] += 1
 
     surface = (row.get("surface") or "").strip().lower()
-    if surface == "clay":
-        agg_winner["clay_won"] += 1
-        agg_winner["clay_played"] += 1
-        agg_loser["clay_played"] += 1
-    elif surface == "hard":
-        agg_winner["hard_won"] += 1
-        agg_winner["hard_played"] += 1
-        agg_loser["hard_played"] += 1
+    if surface in SLOW_SURFACES:
+        agg_winner["slow_won"] += 1
+        agg_winner["slow_played"] += 1
+        agg_loser["slow_played"] += 1
+    elif surface in FAST_SURFACES:
+        agg_winner["fast_won"] += 1
+        agg_winner["fast_played"] += 1
+        agg_loser["fast_played"] += 1
 
     if incomplete:
         return
@@ -328,13 +340,57 @@ def compute_stats(agg: dict) -> dict[str, float | None]:
         "straight_sets_win_pct": pct(agg["straight_set_wins"], agg["wins_complete"]),
         "comeback_win_pct": pct(agg["comeback_wins"], agg["lost_first_set"]),
         "first_set_win_pct": pct(agg["first_sets_won"], agg["first_sets_played"]),
-        "clay_win_pct": (
-            pct(agg["clay_won"], agg["clay_played"]) if agg["clay_played"] >= MIN_SURFACE_MATCHES else None
-        ),
-        "hard_win_pct": (
-            pct(agg["hard_won"], agg["hard_played"]) if agg["hard_played"] >= MIN_SURFACE_MATCHES else None
-        ),
+        "slow_win_pct": pct(agg["slow_won"], agg["slow_played"]),
+        "fast_win_pct": pct(agg["fast_won"], agg["fast_played"]),
     }
+
+
+# Stats whose denominator is a handful of matches/sets rather than hundreds of
+# points, so they need shrinking toward the pool mean before they can be
+# compared across players.
+SMALL_SAMPLE_STATS = {
+    "slow_win_pct": "slow_played",
+    "fast_win_pct": "fast_played",
+    "tiebreaks_won_pct": "tb_played",
+    "deciding_set_won_pct": "decider_played",
+    "comeback_win_pct": "lost_first_set",
+}
+
+
+def sample_sizes(agg: dict) -> dict[str, int]:
+    return {stat: agg[counter] for stat, counter in SMALL_SAMPLE_STATS.items()}
+
+
+def apply_shrinkage(players: list[dict]) -> None:
+    """Pull thin rates toward the pool's own rate, in place.
+
+    A 0%-on-clay built from two matches isn't a weakness, it's an absence of
+    evidence, and treating it as a real number would hand Agassi 2004 a
+    catastrophic card off a two-match sample. Each rate is blended with the
+    pooled rate, weighted by how many matches actually back it: nothing
+    observed lands exactly on the pool rate, a full season barely moves.
+    """
+    for stat in SMALL_SAMPLE_STATS:
+        weighted = total = 0.0
+        for p in players:
+            n, rate = p["samples"][stat], p["stats"][stat]
+            if rate is None or n == 0:
+                continue
+            weighted += rate * n
+            total += n
+        if not total:
+            # Nobody in the pool ever played one. There's nothing to shrink
+            # toward, and inventing a 0% for everyone would be worse than
+            # leaving the stat unknown.
+            continue
+        prior = weighted / total
+
+        for p in players:
+            n, rate = p["samples"][stat], p["stats"][stat]
+            observed = prior if rate is None else rate
+            p["stats"][stat] = round(
+                (n * observed + SHRINKAGE_MATCHES * prior) / (n + SHRINKAGE_MATCHES), 2
+            )
 
 
 def compute_gap_percentiles(players: list[dict], stat_keys: list[str], stat_stddev: dict[str, float]) -> dict[str, float]:
@@ -410,10 +466,15 @@ def build(years: list[int], top_n: int, cache_dir: Path, min_matches: int) -> di
                 "matches_played": played,
                 "matches_with_serve_stats": agg["matches"],
                 "stats": compute_stats(agg),
+                "samples": sample_sizes(agg),
             })
 
     if skipped:
         print(f"note: skipped {skipped} player-years with fewer than {min_matches} matches", file=sys.stderr)
+
+    # Before any pool statistic is derived: thin rates have to be tamed first,
+    # or the mean and stddev they feed are computed over noise.
+    apply_shrinkage(players)
 
     stat_values: dict[str, list[float]] = {k: [] for k in STAT_KEYS}
     for p in players:
