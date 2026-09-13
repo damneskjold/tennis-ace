@@ -7,11 +7,13 @@ per il design completo.
 
 ## Stato
 
-`data/players.json` generato: Top 10 ATP di fine stagione 2021-2025 (50
-carte giocatore-anno). Nota: il repo originale di Jeff Sackmann è stato
-rimosso da GitHub — vedi [`docs/DATA_SOURCE.md`](docs/DATA_SOURCE.md)
-per la fonte sostitutiva usata e perché. Prossimo step: verifica a mano
-del campione (vedi `docs/PROJECT_BRIEF.md`).
+`data/players.json` generato e verificato: Top 10 ATP di fine stagione
+2021-2025 (50 carte giocatore-anno). Nota: il repo originale di Jeff
+Sackmann è stato rimosso da GitHub — vedi
+[`docs/DATA_SOURCE.md`](docs/DATA_SOURCE.md) per la fonte sostitutiva
+usata e perché. Verifica del campione in
+[`docs/VERIFICATION.md`](docs/VERIFICATION.md). Prossimo step: motore
+JS (normalizzazione, selezione categorie, probabilità di vittoria set).
 
 ## Builder
 
