@@ -90,6 +90,25 @@ SHRINKAGE_MATCHES = 10
 
 STAT_KEYS = SERVE_RETURN_STAT_KEYS + SCORE_STAT_KEYS
 
+# The eight cards the v1 game is played with. Each groups raw stats that were
+# measured to be the same axis (correlations 0.62-0.89 within a group), so the
+# player faces eight distinct decisions rather than eighteen overlapping ones.
+# See docs/V1_DESIGN.md for the correlation evidence behind each grouping.
+CATEGORIES = {
+    "servizio": ["ace_pct", "first_won_pct", "bp_saved_pct", "service_games_won_pct"],
+    "prima": ["first_in_pct"],
+    "seconda": ["second_won_pct"],
+    "risposta": ["return_first_won_pct", "return_second_won_pct", "return_games_won_pct"],
+    "palle_break": ["bp_converted_pct"],
+    "tenuta": ["tiebreaks_won_pct", "deciding_set_won_pct", "comeback_win_pct"],
+    "palla_veloce": ["fast_win_pct"],
+    "palla_lenta": ["slow_win_pct"],
+}
+
+# Overall is deliberately compressed: everyone in the pool is a top-25 season,
+# so the gap between the worst and the best of them is narrow by construction.
+OVERALL_FLOOR, OVERALL_CEILING = 80, 99
+
 NUMERIC_MATCH_FIELDS = [
     "w_ace", "w_svpt", "w_1stIn", "w_1stWon", "w_2ndWon", "w_SvGms", "w_bpSaved", "w_bpFaced",
     "l_ace", "l_svpt", "l_1stIn", "l_1stWon", "l_2ndWon", "l_SvGms", "l_bpSaved", "l_bpFaced",
@@ -361,6 +380,63 @@ def sample_sizes(agg: dict) -> dict[str, int]:
     return {stat: agg[counter] for stat, counter in SMALL_SAMPLE_STATS.items()}
 
 
+def percentile_rank(sorted_values: list[float], value: float) -> float:
+    """Share of the pool this value sits above, 0..1."""
+    below = sum(1 for v in sorted_values if v < value)
+    return below / len(sorted_values)
+
+
+def compute_profiles(players: list[dict], stat_mean: dict, stat_stddev: dict) -> None:
+    """Add each player's eight category scores and their overall, in place.
+
+    A category score is the mean of its component stats in z-score space: the
+    raw percentages have different scales and spreads (ace% swings far wider
+    across players than break-points-saved%), so averaging them directly would
+    let the widest-spread stat dominate its own group.
+
+    Each card also carries a 1-99 rating, which is its percentile in the pool
+    -- that's what the UI shows for your own cards and what the opponent's
+    stars are bucketed from. Ratings span the full range while the overall
+    stays in the 80s and 90s, the same way a sports game shows attributes on a
+    wider scale than the headline number.
+    """
+    for p in players:
+        scores = {}
+        for category, keys in CATEGORIES.items():
+            zs = [
+                (p["stats"][k] - stat_mean[k]) / stat_stddev[k]
+                for k in keys
+                if p["stats"][k] is not None and stat_stddev[k]
+            ]
+            scores[category] = round(statistics.fmean(zs), 4) if len(zs) == len(keys) else None
+        p["categories"] = scores
+        # Equal weight per card, so a four-stat group doesn't outvote a
+        # one-stat group just for having more parts.
+        known = [v for v in scores.values() if v is not None]
+        p["_overall_raw"] = statistics.fmean(known) if known else None
+
+    by_category = {
+        c: sorted(p["categories"][c] for p in players if p["categories"][c] is not None)
+        for c in CATEGORIES
+    }
+    for p in players:
+        p["ratings"] = {
+            c: (None if v is None else round(1 + 98 * percentile_rank(by_category[c], v)))
+            for c, v in p["categories"].items()
+        }
+
+    raws = [p["_overall_raw"] for p in players if p["_overall_raw"] is not None]
+    lo, hi = min(raws), max(raws)
+    span = hi - lo
+    for p in players:
+        raw = p.pop("_overall_raw")
+        p["overall"] = (
+            None
+            if raw is None or not span
+            else round(OVERALL_FLOOR + (OVERALL_CEILING - OVERALL_FLOOR) * (raw - lo) / span)
+        )
+
+
 def apply_shrinkage(players: list[dict]) -> None:
     """Pull thin rates toward the pool's own rate, in place.
 
@@ -485,8 +561,10 @@ def build(years: list[int], top_n: int, cache_dir: Path, min_matches: int) -> di
     stat_stddev = {k: round(statistics.pstdev(v), 4) if len(v) > 1 else 0.0 for k, v in stat_values.items()}
     stat_mean = {k: round(statistics.fmean(v), 4) if v else 0.0 for k, v in stat_values.items()}
     gap_percentiles = compute_gap_percentiles(players, STAT_KEYS, stat_stddev)
+    compute_profiles(players, stat_mean, stat_stddev)
 
     return {
+        "categories": list(CATEGORIES),
         "meta": {
             "source": RAW_BASE,
             "years": years,
