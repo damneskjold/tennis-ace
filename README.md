@@ -12,8 +12,35 @@ per il design completo.
 Sackmann è stato rimosso da GitHub — vedi
 [`docs/DATA_SOURCE.md`](docs/DATA_SOURCE.md) per la fonte sostitutiva
 usata e perché. Verifica del campione in
-[`docs/VERIFICATION.md`](docs/VERIFICATION.md). Prossimo step: motore
-JS (normalizzazione, selezione categorie, probabilità di vittoria set).
+[`docs/VERIFICATION.md`](docs/VERIFICATION.md).
+
+Motore di gioco (`engine/`) completo e testato: normalizzazione del
+delta, selezione categorie per turno via percentili sul pool, funzione
+logistica per la probabilità di vittoria del set, punteggio/commento.
+Prossimo step: frontend (bracket, loop match/set, schermata finale).
+
+## Motore di gioco
+
+```
+npm test
+```
+
+- `engine/normalize.js` — normalizza il delta fra due giocatori su una
+  statistica dividendo per la deviazione standard della statistica sul
+  pool (`stat_stddev` in `data/players.json`)
+- `engine/categories.js` — sceglie 2-3 categorie da proporre per turno:
+  ottavi/quarti privilegiano scarti ampi e a favore del giocatore,
+  semifinale/finale scarti via via più piccoli, usando i percentili
+  del pool (`gap_percentiles`) invece di soglie fisse
+- `engine/resolution.js` — funzione logistica sul delta normalizzato
+  per la probabilità di vincere il set, punteggio scelto in base a
+  quanto è stata netta quella probabilità (non fasce fisse sul delta
+  grezzo — vedi la sezione "Risoluzione del set" del brief)
+- `engine/categoryMeta.js` — etichette italiane dei bottoni tattici e
+  varianti di commento testuale per il reveal, per "sapore"
+  (servizio/risposta/tenuta)
+- `engine/index.js` — API pubblica (`createEngine(playersData)`) che
+  compone i moduli sopra
 
 ## Builder
 
