@@ -42,6 +42,9 @@ def main() -> int:
         assert key in result["stat_stddev"]
         assert result["stat_stddev"][key] >= 0
 
+    gp = result["gap_percentiles"]
+    assert 0 <= gp["p25"] <= gp["p50"] <= gp["p75"], gp
+
     print("OK -- build_players.py fixture test passed")
     print(f"  PlayerA stats: {a['stats']}")
     print(f"  PlayerB stats: {b['stats']}")

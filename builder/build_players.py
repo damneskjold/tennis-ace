@@ -225,6 +225,35 @@ def compute_stats(agg: dict) -> dict[str, float | None]:
     }
 
 
+def compute_gap_percentiles(players: list[dict], stat_keys: list[str], stat_stddev: dict[str, float]) -> dict[str, float]:
+    """Distribution of |normalized delta| over every ordered pair of players and
+    every stat both have defined, pooled across all categories (normalization
+    already put them on a comparable scale). The game engine uses these
+    percentiles -- not arbitrary fixed thresholds -- to decide which categories
+    count as "wide gap" (easy round) vs "narrow gap" (hard round) for a given
+    matchup, per docs/PROJECT_BRIEF.md's difficulty-curve design.
+    """
+    gaps: list[float] = []
+    for a in players:
+        for b in players:
+            if a is b:
+                continue
+            for key in stat_keys:
+                va, vb = a["stats"][key], b["stats"][key]
+                if va is None or vb is None:
+                    continue
+                sd = stat_stddev[key]
+                if sd == 0:
+                    continue
+                gaps.append(abs(va - vb) / sd)
+
+    if not gaps:
+        return {"p25": 0.0, "p50": 0.0, "p75": 0.0}
+
+    q = statistics.quantiles(gaps, n=4, method="inclusive")
+    return {"p25": round(q[0], 4), "p50": round(q[1], 4), "p75": round(q[2], 4)}
+
+
 def build(years: list[int], top_n: int, cache_dir: Path) -> dict:
     rankings_text = fetch(f"{RAW_BASE}/atp_rankings_20s.csv", cache_dir / "atp_rankings_20s.csv")
     rankings_rows = load_csv_rows(rankings_text)
@@ -260,6 +289,7 @@ def build(years: list[int], top_n: int, cache_dir: Path) -> dict:
 
     stat_stddev = {k: round(statistics.pstdev(v), 4) if len(v) > 1 else 0.0 for k, v in stat_values.items()}
     stat_mean = {k: round(statistics.fmean(v), 4) if v else 0.0 for k, v in stat_values.items()}
+    gap_percentiles = compute_gap_percentiles(players, STAT_KEYS, stat_stddev)
 
     return {
         "meta": {
@@ -271,6 +301,7 @@ def build(years: list[int], top_n: int, cache_dir: Path) -> dict:
         "stat_keys": STAT_KEYS,
         "stat_mean": stat_mean,
         "stat_stddev": stat_stddev,
+        "gap_percentiles": gap_percentiles,
         "players": players,
     }
 
