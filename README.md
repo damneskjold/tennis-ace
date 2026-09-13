@@ -17,7 +17,24 @@ usata e perché. Verifica del campione in
 Motore di gioco (`engine/`) completo e testato: normalizzazione del
 delta, selezione categorie per turno via percentili sul pool, funzione
 logistica per la probabilità di vittoria del set, punteggio/commento.
-Prossimo step: frontend (bracket, loop match/set, schermata finale).
+
+Frontend v1 giocabile (`index.html` + `app.js` + `style.css`, vanilla,
+niente build step): scelta formato/giocatore, tabellone a 4 turni,
+loop match/set con reveal, schermata finale con pagella e statistiche
+vere evidenziate sulle categorie effettivamente giocate. Testato end
+to end in browser (Playwright): percorso vittoria e percorso
+eliminazione entrambi verificati senza errori.
+
+## Eseguire l'app in locale
+
+Serve un server statico qualsiasi (il `fetch()` di `data/players.json`
+non funziona da `file://`):
+
+```
+python3 -m http.server 8000
+```
+
+poi apri `http://localhost:8000/`.
 
 ## Motore di gioco
 

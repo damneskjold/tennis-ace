@@ -1,0 +1,276 @@
+:root {
+  --court-green: #1b6b3a;
+  --court-green-dark: #124d29;
+  --line-white: #f7f7f2;
+  --ball-yellow: #d7e94e;
+  --ink: #16221a;
+  --muted: #5a6b60;
+  --win: #1b6b3a;
+  --loss: #a3352c;
+  --card-bg: #ffffff;
+  --bg: #eef3ec;
+  font-size: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+#app {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.app-header.compact {
+  margin-bottom: 0.75rem;
+}
+
+.app-header h1 {
+  margin: 0;
+  color: var(--court-green-dark);
+  font-size: 1.8rem;
+}
+
+.app-header.compact h1 {
+  font-size: 1.3rem;
+}
+
+.tagline {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+h2 {
+  color: var(--court-green-dark);
+  margin-top: 1.75rem;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.option-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.option-btn,
+.player-btn,
+.primary-btn,
+.tactic-btn {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 10px;
+  border: 2px solid var(--court-green);
+  background: var(--card-bg);
+  color: var(--ink);
+  padding: 0.7rem 1.1rem;
+}
+
+.option-btn.selected,
+.player-btn.selected {
+  background: var(--court-green);
+  color: var(--line-white);
+}
+
+.player-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.5rem;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0.25rem;
+  border: 1px solid #d9e2d5;
+  border-radius: 10px;
+  background: var(--card-bg);
+}
+
+.player-btn {
+  text-align: left;
+  border-color: #d9e2d5;
+}
+
+.year-tag {
+  display: inline-block;
+  background: var(--ball-yellow);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 0 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: 0.35rem;
+}
+
+.player-btn.selected .year-tag {
+  background: var(--line-white);
+}
+
+.primary-btn {
+  display: block;
+  width: 100%;
+  margin-top: 1.5rem;
+  background: var(--court-green);
+  color: var(--line-white);
+  font-size: 1.05rem;
+  font-weight: 600;
+  padding: 0.9rem;
+}
+
+.primary-btn:disabled {
+  background: #b9c4b3;
+  border-color: #b9c4b3;
+  cursor: not-allowed;
+}
+
+.ladder {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.ladder-step {
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 2px solid #d9e2d5;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.ladder-step.done {
+  border-color: var(--court-green);
+  color: var(--court-green-dark);
+  background: #e3f0e6;
+}
+
+.ladder-step.active {
+  border-color: var(--court-green);
+  background: var(--court-green);
+  color: var(--line-white);
+  font-weight: 600;
+}
+
+.vs-intro,
+.match,
+.reveal,
+.final {
+  background: var(--card-bg);
+  border-radius: 14px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+
+.vs-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 1.5rem 0;
+  flex-wrap: wrap;
+  text-align: center;
+}
+
+.vs-sep {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.score-tally {
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 1rem 0;
+  color: var(--court-green-dark);
+}
+
+.tactic-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.tactic-btn {
+  font-size: 1rem;
+  padding: 0.9rem 1rem;
+  text-align: left;
+}
+
+.tactic-btn:hover {
+  background: #e3f0e6;
+}
+
+.reveal-score {
+  text-align: center;
+  font-size: 3rem;
+  font-weight: 800;
+  margin: 0.5rem 0;
+}
+
+.reveal-score.won {
+  color: var(--win);
+}
+
+.reveal-score.lost {
+  color: var(--loss);
+}
+
+.reveal-comment {
+  text-align: center;
+  font-size: 1.1rem;
+  margin: 0 0 1rem;
+}
+
+.round-recap {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #d9e2d5;
+}
+
+.set-list {
+  padding-left: 1.2rem;
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.stats-table th,
+.stats-table td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #eef1ec;
+}
+
+.stats-table tr.used-stat {
+  background: #fbf6d8;
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .vs-card {
+    flex-direction: column;
+  }
+}
