@@ -471,10 +471,18 @@ root.addEventListener("click", (event) => {
   render();
 });
 
+async function loadPlayersData() {
+  // Embedded when the page ships as a single self-contained bundle; fetched
+  // when it's served as a normal static site.
+  const embedded = document.getElementById("players-data");
+  if (embedded) return JSON.parse(embedded.textContent);
+  return (await fetch("./data/players-v1.json")).json();
+}
+
 async function init() {
   resetToSetup();
   render();
-  playersData = await (await fetch("./data/players-v1.json")).json();
+  playersData = await loadPlayersData();
   engine = createEngine(playersData);
   render();
 }
