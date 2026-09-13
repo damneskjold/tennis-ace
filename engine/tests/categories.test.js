@@ -4,47 +4,77 @@ import { selectCategoryOptions } from "../categories.js";
 
 const GAP_PERCENTILES = { p25: 0.5, p50: 1.0, p75: 1.5 };
 
-// One category per tier, unambiguous relative to GAP_PERCENTILES, so tests
-// don't depend on shuffling among same-tier ties.
 const DELTAS = [
-  { key: "wide_favor_player", delta: 2.0 }, // |delta| >= p75 -> wide, positive
-  { key: "wide_favor_opponent", delta: -2.0 }, // wide, negative
-  { key: "mid_wide", delta: 1.2 }, // p50 <= |delta| < p75
-  { key: "mid_narrow", delta: 0.7 }, // p25 <= |delta| < p50
-  { key: "narrow", delta: 0.1 }, // |delta| < p25
+  { key: "big_favor", delta: 2.4 },
+  { key: "good_favor", delta: 1.6 },
+  { key: "mild_favor", delta: 0.8 },
+  { key: "tiny_favor", delta: 0.1 },
+  { key: "tiny_against", delta: -0.2 },
+  { key: "mild_against", delta: -0.9 },
+  { key: "big_against", delta: -2.1 },
 ];
 
-test("ottavi favors a wide gap that benefits the player", () => {
-  const chosen = selectCategoryOptions(DELTAS, "ottavi", GAP_PERCENTILES, [], 1, () => 0);
-  assert.deepEqual(chosen, ["wide_favor_player"]);
+const noShuffle = () => 0;
+
+test("ottavi offers the most favorable categories available", () => {
+  const chosen = selectCategoryOptions(DELTAS, "ottavi", GAP_PERCENTILES, [], 3, noShuffle);
+  assert.deepEqual(new Set(chosen), new Set(["big_favor", "good_favor", "mild_favor"]));
 });
 
-test("finale favors the narrowest gap, ignoring sign", () => {
-  const chosen = selectCategoryOptions(DELTAS, "finale", GAP_PERCENTILES, [], 1, () => 0);
-  assert.deepEqual(chosen, ["narrow"]);
+test("quarti offers favorable categories but skips the very best ones", () => {
+  const chosen = selectCategoryOptions(DELTAS, "quarti", GAP_PERCENTILES, [], 3, noShuffle);
+  assert.ok(!chosen.includes("big_favor"), `quarti should skip the top pick, got ${chosen}`);
+  assert.ok(chosen.includes("mild_favor"));
+});
+
+test("finale offers the widest gaps available, with both signs represented", () => {
+  const chosen = selectCategoryOptions(DELTAS, "finale", GAP_PERCENTILES, [], 3, noShuffle);
+  const deltas = chosen.map((k) => DELTAS.find((d) => d.key === k).delta);
+  assert.ok(
+    deltas.some((d) => d > 0) && deltas.some((d) => d < 0),
+    `finale must be a real bet: expected both signs, got ${JSON.stringify(deltas)}`,
+  );
+  // The widest gaps, not the narrowest -- the player's accumulated knowledge
+  // has to be worth something in the final.
+  const meanMagnitude = deltas.reduce((sum, d) => sum + Math.abs(d), 0) / deltas.length;
+  assert.ok(meanMagnitude > 1.0, `expected wide gaps in the final, got mean |delta| ${meanMagnitude}`);
+});
+
+test("button order never correlates with quality (otherwise the game solves itself)", () => {
+  // If the best option were always first, a player would just learn to press
+  // button 1 forever. Over many draws each position must see the top pick
+  // roughly equally often.
+  const positionsOfBest = [0, 0, 0];
+  const trials = 3000;
+  for (let i = 0; i < trials; i++) {
+    const chosen = selectCategoryOptions(DELTAS, "ottavi", GAP_PERCENTILES, [], 3, Math.random);
+    positionsOfBest[chosen.indexOf("big_favor")]++;
+  }
+  for (const count of positionsOfBest) {
+    const share = count / trials;
+    assert.ok(share > 0.25 && share < 0.42, `best option lands in one slot too often: ${positionsOfBest}`);
+  }
 });
 
 test("already-used categories are excluded regardless of round", () => {
-  const chosen = selectCategoryOptions(DELTAS, "ottavi", GAP_PERCENTILES, ["wide_favor_player"], 1, () => 0);
-  assert.deepEqual(chosen, ["wide_favor_opponent"]);
+  const chosen = selectCategoryOptions(DELTAS, "ottavi", GAP_PERCENTILES, ["big_favor", "good_favor"], 2, noShuffle);
+  assert.ok(!chosen.includes("big_favor"));
+  assert.ok(!chosen.includes("good_favor"));
+  assert.equal(chosen.length, 2);
 });
 
-test("falls through tiers to fill the requested option count", () => {
-  const chosen = selectCategoryOptions(DELTAS, "finale", GAP_PERCENTILES, [], 3, () => 0);
-  assert.equal(chosen.length, 3);
-  // finale's tier order is narrow, mid_narrow, mid_wide, wide -- so with only
-  // one entry per tier the first three tiers fill the three slots.
-  assert.deepEqual(new Set(chosen), new Set(["narrow", "mid_narrow", "mid_wide"]));
+test("returns fewer options only when categories genuinely run out", () => {
+  const chosen = selectCategoryOptions([DELTAS[0]], "ottavi", GAP_PERCENTILES, [], 3, noShuffle);
+  assert.deepEqual(chosen, ["big_favor"]);
+  assert.deepEqual(selectCategoryOptions([], "finale", GAP_PERCENTILES, [], 3, noShuffle), []);
 });
 
-test("returns fewer than optionCount only when categories genuinely run out", () => {
-  const chosen = selectCategoryOptions([DELTAS[0]], "ottavi", GAP_PERCENTILES, [], 3, () => 0);
-  assert.deepEqual(chosen, ["wide_favor_player"]);
-});
-
-test("never returns duplicate categories", () => {
-  const chosen = selectCategoryOptions(DELTAS, "quarti", GAP_PERCENTILES, [], 4, Math.random);
-  assert.equal(new Set(chosen).size, chosen.length);
+test("never returns duplicate categories, in any round", () => {
+  for (const round of ["ottavi", "quarti", "semifinale", "finale"]) {
+    const chosen = selectCategoryOptions(DELTAS, round, GAP_PERCENTILES, [], 3, Math.random);
+    assert.equal(new Set(chosen).size, chosen.length, `duplicates in ${round}`);
+    assert.equal(chosen.length, 3, `wrong option count in ${round}`);
+  }
 });
 
 test("throws on an unknown round name", () => {

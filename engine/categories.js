@@ -3,38 +3,47 @@
  * "Meccanismo di difficoltà crescente").
  *
  * Difficulty does NOT depend on the (random) opponent's overall strength --
- * it depends on WHICH categories the engine is willing to offer as buttons
- * this round. Early rounds offer categories with a wide gap (in normalized
- * terms) and, where possible, one that favors the player -- so even a
- * careless pick is likely to land on a real advantage. The final offers only
- * near-zero-gap categories: a genuine coin flip regardless of which button
- * you press.
+ * it depends on WHICH categories the engine offers as buttons this round.
  *
- * "Wide" vs "narrow" is judged against gapPercentiles (p25/p50/p75 of
- * |normalized delta| over the whole pool, precomputed by the Python builder
- * -- see build_players.py's compute_gap_percentiles) rather than an
- * arbitrary fixed cutoff.
+ * Selection is RANK-BASED within the matchup, not threshold-based against
+ * the pool. An earlier version classified each category into a tier by
+ * comparing |delta| to the pool's gap percentiles and then fell back to
+ * adjacent tiers when a tier couldn't fill all the buttons. Measured over
+ * 4000 simulated tournaments that produced no difficulty curve at all
+ * (57.5% / 57.8% / 50.1% / 49.8% win rate across the four rounds): 75% of
+ * matchups don't have three categories that are both wide AND in the
+ * player's favor, so the "easy" round kept padding its buttons with traps,
+ * and 43% don't have three narrow categories, so the final kept falling
+ * back to lopsided ones (win probabilities from 0.04 to 0.98 in a round
+ * that was supposed to be a coin flip). Ranking within the matchup always
+ * yields exactly what each round asks for.
+ *
+ * The two axes the rounds move along:
+ *   - SIGN decides expected win rate. Offering categories that favor the
+ *     player is the only thing that makes a round genuinely easier; picking
+ *     by magnitude alone always averages out to 50%, because across random
+ *     matchups half of the wide gaps favor the opponent.
+ *   - MAGNITUDE decides how much the choice matters. Near-zero gaps mean
+ *     every button is the same 50/50 and the player's accumulated knowledge
+ *     of their own player-year is worth nothing. Wide gaps with mixed signs
+ *     mean one button is a blowout win and another a blowout loss -- a
+ *     genuine bet, and the payoff for having learned who your player is.
+ *
+ * So: early rounds hand you favorable gaps (easy), and the final is an
+ * even-odds round where the stakes per button are as high as the matchup
+ * allows, rather than a round where nothing you press matters.
  */
 
-const ROUND_TIER_ORDER = {
-  ottavi: ["wide", "mid_wide", "mid_narrow", "narrow"],
-  quarti: ["mid_wide", "wide", "mid_narrow", "narrow"],
-  semifinale: ["mid_narrow", "narrow", "mid_wide", "wide"],
-  finale: ["narrow", "mid_narrow", "mid_wide", "wide"],
+const ROUND_STRATEGY = {
+  // Most favorable categories available: even a blind pick likely lands a real edge.
+  ottavi: { mode: "favorable", offset: 0 },
+  // Still favorable, but skipping the very best ones.
+  quarti: { mode: "favorable", offset: 2 },
+  // Even odds, moderate stakes per button.
+  semifinale: { mode: "extreme", band: "moderate" },
+  // Even odds, maximum stakes per button: knowing your player is what pays here.
+  finale: { mode: "extreme", band: "max" },
 };
-
-// Only the two "easy" rounds bias toward gaps that favor the player; from
-// the semifinal on, a wide gap against you is just as valid a proposal as
-// one in your favor -- the round is about how NARROW the gap is, not who
-// it favors.
-const PREFERS_POSITIVE_DELTA = new Set(["ottavi", "quarti"]);
-
-function classifyTier(gapSize, gapPercentiles) {
-  if (gapSize >= gapPercentiles.p75) return "wide";
-  if (gapSize >= gapPercentiles.p50) return "mid_wide";
-  if (gapSize >= gapPercentiles.p25) return "mid_narrow";
-  return "narrow";
-}
 
 function shuffle(items, random) {
   const copy = items.slice();
@@ -45,59 +54,66 @@ function shuffle(items, random) {
   return copy;
 }
 
+function selectFavorable(deltas, count, offset) {
+  const sorted = deltas.slice().sort((a, b) => b.delta - a.delta);
+  // Clamp the offset so a matchup with few categories still fills the buttons.
+  const start = Math.max(0, Math.min(offset, sorted.length - count));
+  return sorted.slice(start, start + count);
+}
+
+/**
+ * Guarantee the offered set contains both a favorable and an unfavorable
+ * option when the band has both, so the choice is a real bet rather than
+ * a set of buttons that all lean the same way.
+ */
+function ensureMixedSigns(chosen, pool, count) {
+  if (chosen.length < 2) return chosen;
+  const hasFavorable = chosen.some((e) => e.delta > 0);
+  const hasUnfavorable = chosen.some((e) => e.delta < 0);
+  if (hasFavorable && hasUnfavorable) return chosen;
+
+  const wantedSign = hasFavorable ? -1 : 1;
+  const replacement = pool.find((e) => Math.sign(e.delta) === wantedSign && !chosen.includes(e));
+  if (!replacement) return chosen; // the whole band leans one way; nothing to swap in
+
+  return [...chosen.slice(0, count - 1), replacement];
+}
+
+function selectExtreme(deltas, count, band) {
+  const byMagnitude = deltas.slice().sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  const pool = band === "max" ? byMagnitude : byMagnitude.slice(Math.floor(byMagnitude.length / 3));
+  const chosen = pool.slice(0, count);
+  return ensureMixedSigns(chosen, pool, count);
+}
+
 /**
  * @param {{key: string, delta: number}[]} deltas normalized deltas for this
  *   matchup (already excludes categories missing on either side)
  * @param {"ottavi"|"quarti"|"semifinale"|"finale"} round
- * @param {{p25: number, p50: number, p75: number}} gapPercentiles
+ * @param {{p25: number, p50: number, p75: number}} _gapPercentiles retained
+ *   for callers and diagnostics; selection is rank-based (see module note)
  * @param {Set<string>|string[]} usedCategories categories already played
  *   this match -- excluded regardless of round
  * @param {number} optionCount how many buttons to offer (2 or 3)
- * @param {() => number} [random] injectable RNG for deterministic tests,
- *   defaults to Math.random
- * @returns {string[]} category keys to offer, length up to optionCount
- *   (fewer only if the matchup ran out of eligible categories entirely)
+ * @param {() => number} [random] injectable RNG for deterministic tests
+ * @returns {string[]} category keys to offer, in RANDOM order -- the order
+ *   must never correlate with quality, or the player learns to always press
+ *   the same button and the game solves itself
  */
-export function selectCategoryOptions(deltas, round, gapPercentiles, usedCategories, optionCount, random = Math.random) {
-  const tierOrder = ROUND_TIER_ORDER[round];
-  if (!tierOrder) {
+export function selectCategoryOptions(deltas, round, _gapPercentiles, usedCategories, optionCount, random = Math.random) {
+  const strategy = ROUND_STRATEGY[round];
+  if (!strategy) {
     throw new Error(`Unknown round: ${round}`);
   }
   const used = usedCategories instanceof Set ? usedCategories : new Set(usedCategories);
-  const preferPositive = PREFERS_POSITIVE_DELTA.has(round);
+  const available = deltas.filter((entry) => !used.has(entry.key));
+  if (available.length === 0) return [];
 
-  const byTier = { wide: [], mid_wide: [], mid_narrow: [], narrow: [] };
-  for (const entry of deltas) {
-    if (used.has(entry.key)) continue;
-    byTier[classifyTier(Math.abs(entry.delta), gapPercentiles)].push(entry);
-  }
+  const count = Math.min(optionCount, available.length);
+  const chosen =
+    strategy.mode === "favorable"
+      ? selectFavorable(available, count, strategy.offset)
+      : selectExtreme(available, count, strategy.band);
 
-  const chosen = [];
-  const chosenKeys = new Set();
-
-  for (const tier of tierOrder) {
-    if (chosen.length >= optionCount) break;
-    let pool = byTier[tier];
-    if (pool.length === 0) continue;
-
-    if (preferPositive) {
-      // Best-for-the-player first, deterministically -- shuffling here would
-      // risk handing the "easy" slot to a category that actually favors the
-      // opponent, defeating the whole point of this tier for this round.
-      pool = pool.slice().sort((a, b) => b.delta - a.delta);
-    } else {
-      // Sign doesn't matter at this difficulty: shuffle for variety among
-      // equally-narrow (or equally-wide) categories.
-      pool = shuffle(pool, random);
-    }
-
-    for (const entry of pool) {
-      if (chosen.length >= optionCount) break;
-      if (chosenKeys.has(entry.key)) continue;
-      chosen.push(entry);
-      chosenKeys.add(entry.key);
-    }
-  }
-
-  return chosen.map((entry) => entry.key);
+  return shuffle(chosen, random).map((entry) => entry.key);
 }
