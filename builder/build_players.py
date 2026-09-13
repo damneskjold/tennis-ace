@@ -25,7 +25,10 @@ import sys
 import urllib.request
 from pathlib import Path
 
-RAW_BASE = "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master"
+# The original JeffSackmann/tennis_atp repo was removed from GitHub at some
+# point after mid-2026; this points at a maintained archival mirror instead
+# (see docs/DATA_SOURCE.md for details).
+RAW_BASE = "https://raw.githubusercontent.com/Aneeshers/tennis-sackmann-archive/main/atp"
 INCOMPLETE_MARKERS = ("RET", "W/O", "WEA", "DEF", "ABN")
 
 STAT_KEYS = [
@@ -260,7 +263,7 @@ def build(years: list[int], top_n: int, cache_dir: Path) -> dict:
 
     return {
         "meta": {
-            "source": "https://github.com/JeffSackmann/tennis_atp",
+            "source": RAW_BASE,
             "years": years,
             "top_n": top_n,
             "player_count": len(players),

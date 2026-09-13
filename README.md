@@ -7,8 +7,11 @@ per il design completo.
 
 ## Stato
 
-In sviluppo. Step corrente: builder Python per generare `data/players.json`
-dal dataset [Jeff Sackmann — tennis_atp](https://github.com/JeffSackmann/tennis_atp).
+`data/players.json` generato: Top 10 ATP di fine stagione 2021-2025 (50
+carte giocatore-anno). Nota: il repo originale di Jeff Sackmann è stato
+rimosso da GitHub — vedi [`docs/DATA_SOURCE.md`](docs/DATA_SOURCE.md)
+per la fonte sostitutiva usata e perché. Prossimo step: verifica a mano
+del campione (vedi `docs/PROJECT_BRIEF.md`).
 
 ## Builder
 
