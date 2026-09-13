@@ -42,16 +42,42 @@ diritto: l'hai guadagnata sul campo.
 
 Da fare:
 
-- **Modalità all-star**: solo i veri fuoriclasse (20-30 nomi scelti a mano) e
-  solo le loro annate migliori
+- **Modalità carriera** (Grande Slam: 4 tornei di fila con lo stesso
+  giocatore, uno per superficie) e **modalità all-star**: entrambe secondarie,
+  non ancora iniziate
 - **Calibrare `LOGISTIC_K`** (oggi 0.65, scelto a occhio) contro un obiettivo
   esplicito di difficoltà
 - **Deploy** su GitHub Pages
-- Aperto: dentro al singolo torneo il taccuino ora fa il suo lavoro, ma fra un
-  torneo e l'altro non si accumula nulla — esce un giocatore nuovo e riparti da
-  zero. Una modalità **carriera** (stesso giocatore estratto per più tornei di
-  fila) darebbe respiro alla premessa, ed è letteralmente il sottotitolo del
-  brief originale
+- Aperto: nessun tutorial/spiegazione delle regole nella schermata iniziale —
+  un playtest ha mostrato che non è ovvio come si gioca al primo impatto
+
+### Bug trovati giocandoci davvero (13/09/2026)
+
+Un vero playtest ha fatto emergere due bug che nessun test automatico aveva
+preso, entrambi corretti:
+
+1. **Un turno "facile" poteva offrire una categoria sfavorevole travestita da
+   opportunità.** Quando il matchup aveva meno categorie realmente favorevoli
+   di quante bottoni servivano (21% dei matchup casuali, misurato — non un
+   caso raro), il codice si allargava a tutta la lista comprese le categorie
+   negative. Caso reale: Baghdatis 2006 contro Sampras 1993 ha solo 2
+   categorie a favore di Baghdatis, e gli ottavi ne offrivano comunque 3.
+   Corretto: ora offre sempre e solo le categorie realmente favorevoli, più —
+   se non bastano — la singola meno sfavorevole rimasta, mai una peggiore.
+2. **Un bottone si illuminava di verde a caso.** Era l'hover CSS che su
+   schermo touch resta "attaccato" all'ultimo tasto toccato finché non tocchi
+   altrove — sembrava un suggerimento del gioco, non lo era. Ora l'hover è
+   limitato ai dispositivi con puntatore vero; su touch il feedback al tocco
+   si spegne all'istante al rilascio.
+
+Un terzo punto segnalato ("ho vinto con la statistica peggiore") è
+comportamento corretto, non un bug: il motore è probabilistico, non
+deterministico. Un'opzione al 23% di vincere non è uno 0% — vince circa 1
+volta su 4. Verificato inoltre che ridurre il pool a Top10 **non risolve**
+i matchup senza vantaggi reali (21.6% dei casi, identico al 21.1% del Top25):
+la causa vera è l'incrocio fra epoche (34% dei matchup misti contro l'11%
+nella stessa epoca), perché sotto certe combinazioni di categorie mancanti
+diventa più facile per caso non avere alcun vantaggio.
 
 ## Dati
 
@@ -103,12 +129,17 @@ npm test     # 31 test, nessuna dipendenza esterna (node:test)
 Su 4000 tornei simulati, con scelta casuale dei bottoni e con scelta sempre
 ottimale:
 
-| Turno | P(set) | % match a caso | % match scelta perfetta | peso della scelta |
-|---|---|---|---|---|
-| Ottavi | 0.616 | 64.8% | 71.9% | 0.16 |
-| Quarti | 0.552 | 56.0% | 64.3% | 0.12 |
-| Semifinale | 0.500 | 50.0% | 64.5% | 0.27 |
-| Finale | 0.501 | 49.3% | 72.2% | 0.41 |
+| Turno | P(set) | % match a caso | peso della scelta |
+|---|---|---|---|
+| Ottavi | 0.631 | 67.7% | 0.15 |
+| Quarti | 0.601 | 64.6% | 0.14 |
+| Semifinale | 0.500 | 50.4% | 0.27 |
+| Finale | 0.500 | 49.4% | 0.41 |
+
+(Numeri dopo il fix di [`categories.js`](engine/categories.js) descritto sotto —
+prima del fix i quarti risultavano al 56%, quasi un coin-flip, perché
+occasionalmente offrivano una categoria sfavorevole travestita da "turno
+facile".)
 
 Due proprietà volute: la difficoltà **sale** turno dopo turno, e il **peso
 della scelta** (distanza fra opzione migliore e peggiore) sale anch'esso, così

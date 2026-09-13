@@ -258,8 +258,19 @@ button {
   padding: 0.9rem;
 }
 
-.primary-btn:hover {
-  transform: translateY(-1px);
+/* :hover, scoped to real pointers only: on touch it "sticks" to the last
+   tapped element until something else is tapped (well-known mobile Safari/
+   Chrome behavior), which on a tactic button reads as the game hinting at an
+   answer it never gave. :active covers touch instead -- it releases the
+   instant the finger lifts, so it can't be mistaken for a signal. */
+@media (hover: hover) and (pointer: fine) {
+  .primary-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+}
+
+.primary-btn:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .primary-btn:disabled {
@@ -409,10 +420,18 @@ button {
   font-weight: 600;
 }
 
-.tactic-btn:hover {
-  background: #eef6ef;
+@media (hover: hover) and (pointer: fine) {
+  .tactic-btn:hover {
+    background: #eef6ef;
+    border-color: var(--court);
+    transform: translateY(-1px);
+  }
+}
+
+.tactic-btn:active {
+  background: #e3f0e5;
   border-color: var(--court);
-  transform: translateY(-1px);
+  transform: scale(0.98);
 }
 
 /* --- notebook: what the player has earned, never a stat value --- */

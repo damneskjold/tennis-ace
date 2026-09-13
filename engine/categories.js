@@ -32,6 +32,12 @@
  * So: early rounds hand you favorable gaps (easy), and the final is an
  * even-odds round where the stakes per button are as high as the matchup
  * allows, rather than a round where nothing you press matters.
+ *
+ * "Favorable" rounds (ottavi, quarti) never offer a category that actually
+ * favors the opponent, even when the matchup is too lopsided to supply
+ * enough genuine advantages -- see selectFavorable's degraded branch below.
+ * A round can end up with fewer good options than button slots; it never
+ * fakes one.
  */
 
 const ROUND_STRATEGY = {
@@ -62,15 +68,33 @@ const SHORTLIST_SLACK = 2;
 
 function selectFavorable(deltas, count, offset, random) {
   const sorted = deltas.slice().sort((a, b) => b.delta - a.delta);
-  // Widen only within genuinely favorable categories. Cross-era matchups can
-  // have as few as six categories in total, and letting the shortlist spill
-  // past zero there would quietly put a trap in the easy round.
   const favorable = sorted.filter((entry) => entry.delta > 0);
-  const source = favorable.length >= count ? favorable : sorted;
-  // Clamp the offset so a matchup with few categories still fills the buttons.
-  const start = Math.max(0, Math.min(offset, source.length - count));
-  const shortlist = source.slice(start, start + count + SHORTLIST_SLACK);
-  return shuffle(shortlist, random).slice(0, count);
+
+  if (favorable.length >= count) {
+    // Plenty of genuine advantages: shortlist WITHIN them only, for variety
+    // across sets without ever risking a trap. (A previous version widened
+    // into `sorted` -- the full list -- whenever favorable.length fell short
+    // of count, which quietly mixed unfavorable categories into the
+    // shortlist even when only one or two were missing: on real data,
+    // Baghdatis 2006 vs. Sampras 1993 has exactly two categories favoring
+    // Baghdatis, and "ottavi" offered a third where Sampras was clearly
+    // better, disguised as an easy round. 21% of random matchups have fewer
+    // than three favorable categories -- common, not a fringe case.)
+    const start = Math.max(0, Math.min(offset, favorable.length - count));
+    const shortlist = favorable.slice(start, start + count + SHORTLIST_SLACK);
+    return shuffle(shortlist, random).slice(0, count);
+  }
+
+  // Not enough real advantages in this matchup for the round to keep its
+  // promise. Offer every genuine one there is (possibly zero), then fill
+  // remaining slots with the least-bad of what's left. Deterministic, not
+  // diluted by the shuffle-for-variety mechanism above: a thin matchup
+  // should never have a chance of quietly swapping in a worse trap when a
+  // milder one was available. `offset` (quarti skipping the very best) is
+  // ignored here -- when advantages are this scarce, skipping any of them
+  // for variety's sake isn't worth it.
+  const rest = sorted.slice(favorable.length);
+  return [...favorable, ...rest.slice(0, count - favorable.length)];
 }
 
 /**

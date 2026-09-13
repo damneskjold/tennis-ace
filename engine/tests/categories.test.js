@@ -16,6 +16,44 @@ const DELTAS = [
 
 const noShuffle = () => 0;
 
+// Real bug, found by a human playtester: Marcos Baghdatis 2006 vs. Pete
+// Sampras 1993 has exactly two categories favoring Baghdatis
+// (return_first_won_pct, tiebreaks_won_pct). A previous version of
+// selectFavorable widened into the FULL sorted list whenever the favorable
+// count fell short of what was asked, which could surface a third,
+// unfavorable category disguised as part of "ottavi" -- the round that's
+// supposed to guarantee a real edge. 21% of random matchups (measured on
+// real data) have fewer than three favorable categories, so this wasn't a
+// fringe case.
+const THIN = [
+  { key: "only_favor", delta: 0.3 },
+  { key: "least_bad", delta: -0.1 },
+  { key: "mid_bad", delta: -1.0 },
+  { key: "worst", delta: -3.0 },
+];
+
+test("with too few favorable categories, ottavi never reaches for the worst ones", () => {
+  for (let i = 0; i < 200; i++) {
+    const chosen = selectCategoryOptions(THIN, "ottavi", GAP_PERCENTILES, [], 3, Math.random);
+    assert.deepEqual(
+      new Set(chosen),
+      new Set(["only_favor", "least_bad", "mid_bad"]),
+      `expected the one favorable category plus the two least-bad, got ${chosen}`,
+    );
+    assert.ok(!chosen.includes("worst"), `offered the worst available category: ${chosen}`);
+  }
+});
+
+test("with zero favorable categories, ottavi still returns the least-bad options rather than crashing", () => {
+  const allNegative = [
+    { key: "least_bad", delta: -0.2 },
+    { key: "mid_bad", delta: -1.5 },
+    { key: "worst", delta: -4.0 },
+  ];
+  const chosen = selectCategoryOptions(allNegative, "ottavi", GAP_PERCENTILES, [], 3, Math.random);
+  assert.deepEqual(new Set(chosen), new Set(["least_bad", "mid_bad", "worst"]));
+});
+
 test("ottavi only ever offers categories from the favorable end", () => {
   // Sampled from a shortlist for variety, so assert the property that matters:
   // never an option that favors the opponent while better ones went unoffered.
